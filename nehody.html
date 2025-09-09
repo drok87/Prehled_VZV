@@ -1,0 +1,1516 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analýza nehod • Accident Analysis (v22)</title>
+  <script src="https://cdn.tailwindcss.com">
+function exportTrendCsv(){
+  const d = window.__trendExport; if (!d) return;
+  const headers = ['Bucket','All','Low','Medium','High','Granularity','Cumulative'];
+  const lines = [headers.join(',')];
+  for (let i=0;i<d.labels.length;i++){
+    const row = [d.labels[i], d.all[i]||0, d.low[i]||0, d.mid[i]||0, d.high[i]||0, d.granularity, d.cumulative?1:0];
+    lines.push(row.join(','));
+  }
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='trend_series.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js">
+function exportTrendCsv(){
+  const d = window.__trendExport; if (!d) return;
+  const headers = ['Bucket','All','Low','Medium','High','Granularity','Cumulative'];
+  const lines = [headers.join(',')];
+  for (let i=0;i<d.labels.length;i++){
+    const row = [d.labels[i], d.all[i]||0, d.low[i]||0, d.mid[i]||0, d.high[i]||0, d.granularity, d.cumulative?1:0];
+    lines.push(row.join(','));
+  }
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='trend_series.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js">
+function exportTrendCsv(){
+  const d = window.__trendExport; if (!d) return;
+  const headers = ['Bucket','All','Low','Medium','High','Granularity','Cumulative'];
+  const lines = [headers.join(',')];
+  for (let i=0;i<d.labels.length;i++){
+    const row = [d.labels[i], d.all[i]||0, d.low[i]||0, d.mid[i]||0, d.high[i]||0, d.granularity, d.cumulative?1:0];
+    lines.push(row.join(','));
+  }
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='trend_series.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+</script>
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.3.0/dist/chartjs-chart-matrix.min.js">
+function exportTrendCsv(){
+  const d = window.__trendExport; if (!d) return;
+  const headers = ['Bucket','All','Low','Medium','High','Granularity','Cumulative'];
+  const lines = [headers.join(',')];
+  for (let i=0;i<d.labels.length;i++){
+    const row = [d.labels[i], d.all[i]||0, d.low[i]||0, d.mid[i]||0, d.high[i]||0, d.granularity, d.cumulative?1:0];
+    lines.push(row.join(','));
+  }
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='trend_series.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+</script>
+  <style>
+    .dropzone { border: 2px dashed #cbd5e1; }
+    .dropzone.dragover { border-color: #6366f1; background-color: #f5f3ff; }
+    th, td { white-space: nowrap; }
+    .table-wrap { overflow: auto; }
+    .chart-box { position: relative; height: 300px; }
+    .chart-box canvas { width: 100% !important; height: 100% !important; }
+    .chart-empty { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:#94a3b8; font-size:.9rem; }
+    .modal-backdrop{position:fixed;inset:0;background:rgba(15,23,42,.5);display:none;z-index:1000;}
+    .modal{position:fixed;inset:0;display:none;align-items:center;justify-content:center;z-index:1001;}
+    .modal.open,.modal-backdrop.open{display:flex}
+    @media print{
+      #uploader, #filtersPanel button, #filtersPanel select, #filtersPanel input, #exportCsvBtn, #exportXlsxBtn, #langToggle, #printBtn, #chartsSection .controls, #driverHint, #statusBadge { display:none !important; }
+      body { background: white; }
+      .shadow { box-shadow: none !important; }
+    }
+  
+    .sev-low { color:#2563eb; background:#eff6ff; }
+    .sev-mid { color:#b45309; background:#fffbeb; }
+    .sev-high{ color:#b91c1c; background:#fef2f2; }
+    .sev-pill{ border-radius: 0.75rem; padding: 0.25rem 0.5rem; display:inline-flex; align-items:center; gap:.35rem; font-weight:600; }
+    .sev-pill small{ font-weight:500; opacity:.7; }
+
+  
+    /* v28: Top 5 layout improvements */
+    #topRiskSection .card-lg { border-radius: 1rem; padding: 1rem; min-width: 200px; }
+    #topRiskSection .title-lg { font-size: 1.05rem; white-space: nowrap; overflow:hidden; text-overflow:ellipsis; }
+    #topRiskSection .meta-lg { font-size: .9rem; }
+    .sev-stack { display:flex; flex-direction:column; gap:.35rem; margin-bottom:.5rem; }
+
+  
+    /* v30 polish */
+    .table-wrap thead th { position: sticky; top: 0; z-index: 1; }
+    #summaryTable tbody tr:nth-child(odd){ background: #fafafa; }
+    #summaryTable thead th.sortable { cursor: pointer; }
+    #summaryTable thead th.sortable .arrow { opacity:.6; font-size:.8em; margin-left:.25rem; }
+
+  
+    /* v33: Top 5 fills full width using flex */
+    #topRiskSection .card-lg { flex: 1 1 0; min-width: 240px; }
+    @media (min-width: 1280px){
+      #topRiskSection .card-lg { min-width: 260px; }
+    }
+
+  
+    /* v34: Top 3 side-by-side */
+    #topRiskSection #topRiskWrap { justify-content: space-between; }
+    #topRiskSection .card-lg { flex: 1 1 30%; min-width: 300px; }
+    @media (min-width: 1280px){
+      #topRiskSection .card-lg { min-width: 340px; }
+    }
+
+  
+    /* v35: Top 3 side-by-side in 3-column grid */
+    #topRiskSection .card-lg { width: 100%; min-width: 0; }
+
+  
+    /* v36: force Top 3 to span full width with equal columns */
+    #topRiskWrap { width:100%; }
+    @media (min-width: 768px){
+      #topRiskWrap { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1rem; }
+    }
+    @media (max-width: 767.98px){
+      #topRiskWrap { display:grid; grid-template-columns: 1fr; gap: 1rem; }
+    }
+    /* neutralize any leftover flex settings */
+    #topRiskSection #topRiskWrap { justify-content: initial; align-items: stretch; }
+    #topRiskSection .card-lg { width:100%; min-width:0; }
+
+  
+    /* v38: Top cards stretch across full width */
+    #topRiskWrap { display:grid; grid-template-columns: repeat(auto-fit,minmax(250px,1fr)); gap:1.5rem; }
+    #topRiskSection .card-lg { width:100%; }
+
+  
+    /* v39: ensure TopRiskSection spans full grid width even if nested inside a grid */
+    #topRiskSection { grid-column: 1 / -1; }
+
+  
+/* Sticky header + scroll wrappers (added) */
+#summaryWrap thead th,
+#driverIncidentsWrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f1f5f9;
+}
+
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-[1400px] mx-auto p-4">
+    <header class="flex items-center justify-between mb-4">
+      <h1 class="text-2xl font-bold">
+        <span data-i="title">Analýza nehod</span>
+        <span class="text-slate-400">/ <span data-i="title_en">Accident Analysis</span></span>
+        <span class="text-xs text-slate-400 ml-2">(v22)</span>
+      </h1>
+      <div class="flex gap-2 items-center"><button id="helpBtn" class="rounded-lg border px-3 py-2 text-sm" title="Nápověda / Help">?</button>
+        <button id="langToggle" class="rounded-lg border px-3 py-2 text-sm">EN</button>
+        <span id="statusBadge" class="hidden text-xs px-2 py-1 rounded bg-slate-200"></span>
+        <button id="exportCsvBtn" class="hidden rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-500" data-i="export_csv">Exportovat CSV</button>
+        <button id="exportXlsxBtn" class="hidden rounded-lg bg-emerald-600 text-white px-3 py-2 text-sm font-medium hover:bg-emerald-500" data-i="export_xlsx">Exportovat XLSX</button>
+      </div>
+    </header>
+
+    <section class="grid md:grid-cols-3 gap-4 mb-6">
+      <div id="uploader" class="dropzone rounded-2xl bg-white p-6 shadow flex flex-col justify-center items-center">
+        <h2 class="font-semibold mb-2" data-i="uploader_h2">Nahrajte report nehod (.xlsx)</h2>
+        <p class="text-sm text-slate-600 mb-3 text-center" data-i="uploader_p">Přetáhněte soubor (např. ShockDetailReport.xlsx) nebo ho vyberte.</p>
+        <input id="fileInput" type="file" accept=".xlsx,.xls" class="block w-full text-sm" />
+        <p class="text-xs text-slate-500 mt-2" data-i="uploader_hint">Hlavička bude rozpoznána automaticky (podporované aliasy sloupců).</p>
+      </div>
+      <div id="filtersPanel" class="rounded-2xl bg-white p-6 shadow md:col-span-2">
+        <div class="flex items-center justify-between">
+          <h2 class="font-semibold mb-2" data-i="filters">Filtry<span class="ml-2 text-slate-400 cursor-help" data-help="Filtry datum od–do, skupina, provoz. Uložení do localStorage.">ⓘ</span></h2>
+          <div class="controls flex gap-2">
+            <button id="resetFiltersBtn" class="rounded-lg border px-3 py-2 text-sm" data-i="reset_filters">Reset</button>
+            <button id="saveFiltersBtn" class="rounded-lg border px-3 py-2 text-sm" data-i="save_filters">Uložit</button>
+          </div>
+        </div>
+        <div class="grid grid-cols-2 md:grid-cols-5 gap-4 text-sm">
+          <div>
+            <label class="block text-slate-600 mb-1" data-i="from">Datum od</label>
+            <input id="dateFrom" type="date" class="w-full border rounded px-2 py-1" />
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1" data-i="to">Datum do</label>
+            <input id="dateTo" type="date" class="w-full border rounded px-2 py-1" />
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1" data-i="group">Skupina</label>
+            <select id="groupBy" class="w-full border rounded px-2 py-1">
+              <option value="Stroj" data-i="g_machine">Stroj / Vozík</option>
+              <option value="Model" data-i="g_model">Model</option>
+              <option value="Řidič" data-i="g_driver">Řidič</option>
+              <option value="Provoz" data-i="g_site">Provoz / Umístění</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1" data-i="site">Provoz</label>
+            <select id="siteFilter" class="w-full border rounded px-2 py-1">
+              <option value="__ALL__" data-i="all_sites">Všechny provozy</option>
+            </select>
+          </div>
+          <div class="col-span-2 md:col-span-1 flex items-end">
+            <button id="applyBtn" class="ml-auto rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-500" data-i="apply">Použít</button>
+          </div>
+        </div>
+      </div>
+    
+    <section id="topRiskSection" class="w-full max-w-none" class="rounded-2xl bg-white p-6 shadow mb-6" style="display:none;">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold" data-i="top5">Top 5 nejrizikovějších skupin (skóre 1/2/3)</h2>
+        <span class="text-xs text-slate-500" data-i="top5_hint">Seřazeno dle skóre: 1×Nízké + 2×Střední + 3×Vysoké</span>
+        <div class="ml-auto flex gap-2">
+          <button id="btnTop3" class="rounded-full border px-3 py-1 text-xs">Top 3</button>
+          <button id="btnTop5" class="rounded-full border px-3 py-1 text-xs">Top 5</button>
+        </div>
+      </div>
+      <div id="topRiskWrap" class="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-5 gap-4"></div>
+    </section>
+</section>
+
+    <section class="mb-6" id="chartsSection" style="display:none;">
+      <div class="rounded-2xl bg-white p-6 shadow mb-4">
+        <div class="flex items-center justify-between mb-2">
+          <h2 class="font-semibold" data-i="dist_by_group">Rozložení nehod dle skupiny</h2>
+        </div>
+        <div class="chart-box"><canvas id="stackChart"></canvas><div id="stackEmpty" class="chart-empty hidden">Žádná data</div></div>
+      </div>
+
+      <div class="grid gap-4">
+        <div class="rounded-2xl bg-white p-6 shadow">
+          <h2 class="font-semibold mb-2" data-i="trend_monthly">Trend po měsících <span class="ml-2 text-slate-400 cursor-help" data-help="Agregace po měsících dle filtrovaných záznamů."></span></h2>
+<div id="trendSubtitle" class="text-xs text-slate-500 mb-2"></div>
+<div class="flex flex-wrap items-center gap-2 mb-2" id="trendControls">
+  <label class="text-xs text-slate-600">Granularita:
+    <select id="granularity" class="border rounded px-2 py-1 text-xs ml-1">
+      <option value="month">Měsíce</option>
+      <option value="week">Týdny</option>
+      <option value="day">Dny</option>
+    </select>
+  </label>
+  <label class="text-xs text-slate-600 ml-2"><input id="cumToggle" type="checkbox" class="mr-1">Kumulativně</label>
+  <label class="text-xs text-slate-600 ml-2"><input id="weekendToggle" type="checkbox" class="mr-1">Zvýraznit víkendy (pro dny)</label>
+  <button id="trendExportBtn" class="rounded border px-2 py-1 text-xs ml-auto">Exportovat sérii CSV</button>
+</div>
+
+          <div class="chart-box"><canvas id="trendChart"></canvas><div id="trendEmpty" class="chart-empty hidden">Žádná data</div></div>
+        </div>
+        </div>
+      </div>
+    </section>
+
+    <section id="summarySection" class="rounded-2xl bg-white p-6 shadow mb-10" style="display:none;">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold" data-i="summary">Souhrnná tabulka <span class="ml-2 text-slate-400 cursor-help" data-help="Klik na Skupinu otevře detail. Řazení klikem na záhlaví."></span></h2>
+        <button id="printBtn" class="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50" data-i="print">Tisk / PDF</button>
+      </div>
+      <div class="table-wrap max-h-[60vh] overflow-y-auto" id="summaryWrap">
+        <table id="summaryTable" class="min-w-full text-sm">
+          <thead class="bg-slate-100"></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <p id="driverHint" class="text-xs text-slate-500 mt-2">Tip: Klikni na hodnotu ve sloupci <b>Skupina</b> pro otevření detailu (podle aktuální volby <b>Skupina</b> výše).</p>
+    </section>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop"></div>
+  <div id="driverModal" class="modal">
+    <div class="max-w-5xl w-[95vw] md:w-[80vw] max-h-[90vh] overflow-auto rounded-2xl bg-white shadow-xl">
+      <div class="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+        <h3 id="driverTitle" class="text-lg font-semibold">Profil řidiče</h3>
+        <div class="flex items-center gap-2">
+          <button id="exportDriverXlsxBtn" class="rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50">Export XLSX</button>
+          <button id="exportDriverBtn" class="rounded-lg border px-3 py-1.5 text-sm hover:bg-slate-50">Export CSV</button>
+          <button id="closeModalBtn" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm">Zavřít</button>
+        </div>
+      </div>
+      <div class="p-4 grid md:grid-cols-3 gap-4">
+        <div class="rounded-xl border p-3">
+          <div class="text-xs text-slate-500 mb-1">Souhrn</div>
+          <ul id="driverSummary" class="text-sm space-y-1"></ul>
+        </div>
+        <div class="rounded-xl border p-3 md:col-span-2">
+          <div class="text-xs text-slate-500 mb-1">Rozdělení dle závažnosti <span class="ml-1 text-slate-400 cursor-help" data-help="Počty incidentů podle závažnosti. / Severity split."></span></div>
+          <div class="h-52"><canvas id="severityChart"></canvas></div>
+        </div>
+        <div class="rounded-xl border p-3">
+          <div id="labelTopA" class="text-xs text-slate-500 mb-1">Top stroje <span class="ml-1 text-slate-400 cursor-help" data-help="Nejčastější stroje v incidentech této entity. / Most frequent machines."></span></div>
+          <ul id="topMachines" class="text-sm space-y-1"></ul>
+        </div>
+        <div class="rounded-xl border p-3">
+          <div id="labelTopB" class="text-xs text-slate-500 mb-1">Top modely <span class="ml-1 text-slate-400 cursor-help" data-help="Nejčastější modely v incidentech této entity. / Most frequent models."></span></div>
+          <ul id="topModels" class="text-sm space-y-1"></ul>
+        </div>
+        <div class="rounded-xl border p-3 md:col-span-3">
+          <div id="labelDist" class="text-xs text-slate-500 mb-1">Rozdělení dle provozů <span class="ml-1 text-slate-400 cursor-help" data-help="Počet incidentů dle provozů/umístění. / By sites/locations."></span></div>
+          <div class="h-52"><canvas id="driverSitesChart"></canvas></div>
+        </div>
+        <div class="rounded-xl border p-3 md:col-span-3">
+          <div class="flex items-center justify-between mb-2">
+            <div class="text-xs text-slate-500">Seznam nehod (posledních 200)</div>
+            <input id="incidentSearch" placeholder="Hledat… (stroj, model, datum)" class="border rounded px-2 py-1 text-sm"/>
+          </div>
+          <div class="table-wrap max-h-[60vh] overflow-y-auto" id="driverIncidentsWrap">
+            <table class="min-w-full text-xs" id="driverIncidentsTable">
+              <thead>
+                <tr class="bg-slate-100"><th class="text-left px-2 py-1">Datum/čas <span class="ml-1 text-slate-400 cursor-help" data-help="Čas nárazu po normalizaci formátu. / Parsed event time."></span></th><th class="text-left px-2 py-1">Závažnost <span class="ml-1 text-slate-400 cursor-help" data-help="Nízké/Střední/Vysoké po normalizaci. / Normalized severity."></span></th><th class="text-left px-2 py-1">Stroj <span class="ml-1 text-slate-400 cursor-help" data-help="Identifikátor zařízení/vozíku. / Asset ID."></span></th><th class="text-left px-2 py-1">Model <span class="ml-1 text-slate-400 cursor-help" data-help="Model/typ zařízení. / Model/type."></span></th><th class="text-left px-2 py-1">Uzamčení <span class="ml-1 text-slate-400 cursor-help" data-help="1 = existuje záznam o uzamčení; prázdné/0/no = 0. / Lock boolean normalization."></span></th><th class="text-left px-2 py-1">Jízda <span class="ml-1 text-slate-400 cursor-help" data-help="1 = drive/ride/travel; jinak 0. / Ride boolean."></span></th><th class="text-left px-2 py-1">Zdvih <span class="ml-1 text-slate-400 cursor-help" data-help="1 = lift/hoist; jinak 0. / Lift boolean."></span></th><th class="text-left px-2 py-1">Rychlost <span class="ml-1 text-slate-400 cursor-help" data-help="Hodnota z reportu. / Speed value from report."></span></th><th class="text-left px-2 py-1">BDI <span class="ml-1 text-slate-400 cursor-help" data-help="Síla nárazu / BDI."></span></th><th class="text-left px-2 py-1">X <span class="ml-1 text-slate-400 cursor-help" data-help="Síla na ose X."></span></th><th class="text-left px-2 py-1">Y <span class="ml-1 text-slate-400 cursor-help" data-help="Síla na ose Y."></span></th></tr>
+              </thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // i18n
+    const I18N = {
+      cz: { title:'Analýza nehod', title_en:'Accident Analysis',
+        export_csv:'Exportovat CSV', export_xlsx:'Exportovat XLSX',
+        uploader_h2:'Nahrajte report nehod (.xlsx)', uploader_p:'Přetáhněte soubor (např. ShockDetailReport.xlsx) nebo ho vyberte.', uploader_hint:'Hlavička bude rozpoznána automaticky (podporované aliasy sloupců).',
+        filters:'Filtry', reset_filters:'Reset', save_filters:'Uložit', from:'Datum od', to:'Datum do', group:'Skupina', site:'Provoz', all_sites:'Všechny provozy', apply:'Použít',
+        dist_by_group:'Rozložení nehod dle skupiny', trend_monthly:'Trend po měsících', heatmap:'Heatmapa: den v týdnu × hodina', summary:'Souhrnná tabulka', print:'Tisk / PDF',
+        driver_hint:'Tip: Když je „Skupina“ = <b>Řidič</b>, klikni na jméno pro detailní profil.',
+        col_group:'Skupina', col_count:'Počet nehod', col_low:'Nízké', col_mid:'Střední', col_high:'Vysoké',
+        col_lock:'Uzamčení', col_ride:'Jízda', col_lift:'Zdvih', col_speed:'Rychlost', col_bdi:'BDI', col_x:'X', col_y:'Y', col_index:'Index závažnosti', top5:'Top nejrizikovějších skupin (skóre 1/2/3)', top5_hint:'Seřazeno dle skóre: 1×Nízké + 2×Střední + 3×Vysoké'
+      },
+      en: { title:'Accident Analysis', title_en:'Accident Analysis',
+        export_csv:'Export CSV', export_xlsx:'Export XLSX',
+        uploader_h2:'Upload accident report (.xlsx)', uploader_p:'Drag & drop a file (e.g., ShockDetailReport.xlsx) or pick it.', uploader_hint:'Header will be auto-detected (column alias mapping).',
+        filters:'Filters', reset_filters:'Reset', save_filters:'Save', from:'Date from', to:'Date to', group:'Group', site:'Site', all_sites:'All sites', apply:'Apply',
+        dist_by_group:'Distribution by group', trend_monthly:'Monthly trend', heatmap:'Heatmap: weekday × hour', summary:'Summary table', print:'Print / PDF',
+        driver_hint:'Tip: When “Group” = Driver, click a name for the detailed profile.',
+        col_group:'Group', col_count:'Incidents', col_low:'Low', col_mid:'Medium', col_high:'High',
+        col_lock:'Lock', col_ride:'Ride', col_lift:'Lift', col_speed:'Speed', col_bdi:'BDI', col_x:'X', col_y:'Y', col_index:'Severity Index', top5:'Top riskiest groups (score 1/2/3)', top5_hint:'Sorted by score: 1×Low + 2×Medium + 3×High'
+      }
+    };
+    let LANG = localStorage.getItem('acc_lang') || 'cz';
+    function applyLang(){
+      const dict = I18N[LANG];
+      document.querySelectorAll('[data-i]').forEach(el => {
+        const key = el.getAttribute('data-i');
+        if (dict[key]!==undefined) el.innerHTML = dict[key];
+      });
+      document.getElementById('langToggle').textContent = (LANG==='cz'?'EN':'CZ');
+      localStorage.setItem('acc_lang', LANG);
+    }
+
+    
+    // --- DEBUG helpers ---
+    let DEBUG = true; // set to false to silence console diagnostics
+    function safeLog(...args){ if (DEBUG) { try { console.debug('[diag]', ...args); } catch(e){} } }
+    // ----------------------
+// --- Trend controls state ---
+let trendGranularity = localStorage.getItem('acc_trend_granularity') || 'month';
+let trendCumulative = localStorage.getItem('acc_trend_cumulative') === '1';
+let trendWeekend = localStorage.getItem('acc_trend_weekend') === '1';
+
+function setTrendControlsFromState(){
+  const g = document.getElementById('granularity');
+  const c = document.getElementById('cumToggle');
+  const w = document.getElementById('weekendToggle');
+  if (g) g.value = trendGranularity;
+  if (c) c.checked = trendCumulative;
+  if (w) w.checked = trendWeekend;
+}
+function saveTrendState(){
+  localStorage.setItem('acc_trend_granularity', trendGranularity);
+  localStorage.setItem('acc_trend_cumulative', trendCumulative ? '1' : '0');
+  localStorage.setItem('acc_trend_weekend', trendWeekend ? '1' : '0');
+}
+
+// ISO week helpers
+function isoWeekYear(d){
+  const date = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+  const dayNum = date.getUTCDay() || 7; // Mon=1..Sun=7
+  date.setUTCDate(date.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(date.getUTCFullYear(),0,1));
+  const weekNo = Math.ceil((((date - yearStart) / 86400000) + 1)/7);
+  return {year: date.getUTCFullYear(), week: weekNo};
+}
+
+function bucketKey(d, granularity){
+  if (!(d instanceof Date) || isNaN(d)) return null;
+  if (granularity==='day'){
+    const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0'), day=String(d.getDate()).padStart(2,'0');
+    return { key:`${y}-${m}-${day}`, label:`${y}-${m}-${day}`, sort:`${y}-${m}-${day}` };
+  }
+  if (granularity==='week'){
+    const iw = isoWeekYear(d);
+    const w = String(iw.week).padStart(2,'0');
+    return { key:`${iw.year}-W${w}`, label:`${iw.year}-W${w}`, sort:`${iw.year}-${w}` };
+  }
+  // month default
+  const y=d.getFullYear(), m=String(d.getMonth()+1).padStart(2,'0');
+  return { key:`${y}-${m}`, label:`${y}-${m}`, sort:`${y}-${m}` };
+}
+
+function cumulative(arr){
+  let s = 0; return arr.map(v=>{ s += (v||0); return s; });
+}
+
+// Weekend highlight plugin (for daily granularity)
+const weekendHighlighter = {
+  id: 'weekendHighlighter',
+  beforeDraw(chart){
+    try{
+      if (!trendWeekend) return;
+      if (trendGranularity !== 'day') return;
+      const {ctx, chartArea, scales} = chart;
+      if (!chartArea) return;
+      const labels = chart.data.labels || [];
+      ctx.save();
+      ctx.fillStyle = 'rgba(148,163,184,0.15)'; // light slate
+      labels.forEach((lab, idx)=>{
+        const parts = String(lab).split('-'); if (parts.length!==3) return;
+        const d = new Date(Number(parts[0]), Number(parts[1])-1, Number(parts[2]));
+        const day = d.getDay(); // 0=Sun,6=Sat
+        if (day===0 || day===6){
+          const x = scales.x.getPixelForValue(idx);
+          const nextX = scales.x.getPixelForValue(idx+1);
+          const w = Math.max(0, (nextX - x));
+          ctx.fillRect(x - (w/2), chartArea.top, w, chartArea.bottom - chartArea.top);
+        }
+      });
+      ctx.restore();
+    }catch(e){ /* ignore */ }
+  }
+};
+
+
+    let rawAccidentData = [];
+    let parsedData = [];
+    let summary = [];
+    let currentGroupBy = 'Stroj';
+    let stackChart; let severityChart; let trendChart; let heatmapChart; window.driverSitesChart = window.driverSitesChart || null; window.driverSitesChart = window.driverSitesChart || null;
+    let siteFilterEl;
+    let topN = parseInt(localStorage.getItem('acc_topN')||'3',10);
+    function updateTopTitle(){
+      const h = document.querySelector('#topRiskSection h2 [data-i]') || document.querySelector('#topRiskSection h2');
+    }
+
+    let sortKey = 'total';
+    let sortDir = 'desc'; // 'asc' | 'desc'
+    function numFmt(n, decimals=0){ if(n===null||n===undefined||n==='') return '—'; const f = (decimals>0? Number(n).toFixed(decimals): Math.round(Number(n))); return f.toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' '); }
+
+    function setStatus(msg){ const b=document.getElementById('statusBadge'); b.textContent=msg; b.classList.remove('hidden'); }
+    function fmtDate(d){ if(!d) return ''; const y=d.getFullYear(); const m=String(d.getMonth()+1).padStart(2,'0'); const day=String(d.getDate()).padStart(2,'0'); return y+'-'+m+'-'+day; }
+    function fmtDateTime(d){ if(!d) return ''; const dd=String(d.getDate()).padStart(2,'0'); const mm=String(d.getMonth()+1).padStart(2,'0'); const yyyy=d.getFullYear(); const hh=String(d.getHours()).padStart(2,'0'); const min=String(d.getMinutes()).padStart(2,'0'); return dd+'.'+mm+'.'+yyyy+' '+hh+':'+min; }
+
+    // DnD
+    const dropzone = document.getElementById('uploader');
+    dropzone.addEventListener('dragover', e=>{ e.preventDefault(); dropzone.classList.add('dragover'); });
+    dropzone.addEventListener('dragleave', ()=> dropzone.classList.remove('dragover'));
+    dropzone.addEventListener('drop', e=>{ e.preventDefault(); dropzone.classList.remove('dragover'); const files=e.dataTransfer.files; if (files.length) loadFile(files[0]); });
+    document.getElementById('fileInput').addEventListener('change', e=>{ if (e.target.files.length) loadFile(e.target.files[0]); });
+
+    const KEY_ALIASES = {
+      'Stroj': ['Stroj','Vozík','Vozik','Truck','Asset','Device','Equipment','Forklift'],
+      'Model': ['Model','Typ','Type','Model name'],
+      'Řidič': ['Řidič','Ridic','řidič','ridic','Operátor','Operator','Driver','User'],
+      'Provoz': ['Provoz','Oddělení','Oddeleni','Operation','Site','Warehouse','Location','Provozni stredisko','Area'],
+      'Čas nárazu': ['Čas nárazu','Cas narazu','Datum','Date','Datum/čas','Timestamp','Event Time','Time','EventTime','Occured At','Occurred At'],
+      'Úroveň nárazu': ['Úroveň nárazu','Úrověň nárazu','Uroven narazu','ÚROVEŇ NÁRAZU'],
+      'Uzamčení': ['Uzamčení','Uzamceni','Lock','Locked','Lockout','Zámek','Zamek'],
+      'Jízda': ['Jízda','Jizda','Ride','Drive','Travel','Jízda/Drive','Movement'],
+      'Zdvih': ['Zdvih','Lift','Hoist','Zdvih/Hoist'],
+      'Rychlost': ['Rychlost','Speed','Max Speed','Avg Speed','Rychlost (km/h)'],
+      'BDI': ['BDI','Impact','Impact Strength','Force','Síla nárazu','Sila narazu'],
+      'X': ['X','X-axis','Accel X','Force X'],
+      'Y': ['Y','Y-axis','Accel Y','Force Y']
+    };
+
+    function detectHeader(raw){
+      let bestRowIndex = -1; let bestScore = -1; let bestHeaders = null;
+      for (let r=0; r<Math.min(raw.length, 60); r++){
+        const row = raw[r] || []; if (!row.length) continue;
+        const score = row.reduce(function(acc, cell){
+          const s = String(cell||'').toLowerCase();
+          let hit = 0; Object.values(KEY_ALIASES).forEach(function(list){ if (list.some(function(a){ return s.includes(a.toLowerCase()); })) hit++; });
+          return acc + hit;
+        }, 0);
+        if (score>bestScore){ bestScore=score; bestRowIndex=r; bestHeaders=row; }
+        if (score>=2) break;
+      }
+      if (bestRowIndex === -1) return { headers:null, startIndex:-1 };
+      return { headers: bestHeaders, startIndex: bestRowIndex };
+    }
+
+    function mapToStandard(headers, row){
+      const obj = {}; headers.forEach(function(h,i){ obj[String(h||'').trim()] = row[i]; });
+      const std = Object.assign({}, obj);
+      Object.keys(KEY_ALIASES).forEach(function(stdKey){
+        if (!(stdKey in std)){
+          const hitIndex = headers.findIndex(function(h){
+            const s = String(h||'').trim().toLowerCase();
+            return KEY_ALIASES[stdKey].some(function(a){ return s === a.toLowerCase() || s.includes(a.toLowerCase()); });
+          });
+          if (hitIndex>=0) std[stdKey] = row[hitIndex];
+        }
+      });
+      // Uzamčení: boolean vs time
+      const uzIdxs = [];
+      headers.forEach(function(h,i){
+        const s = String(h||'').trim().toLowerCase();
+        if (s === 'uzamčení' || s === 'uzamceni') uzIdxs.push(i);
+      });
+      if (uzIdxs.length > 1){
+        uzIdxs.forEach(function(i){
+          const v = row[i];
+          const sv = String(v===undefined||v===null?'':v).trim().toLowerCase();
+          const isBool = ['ano','ne','yes','no','true','false','0','1','on','off'].includes(sv);
+          const isDate = /^\d{1,2}[\.\/]\d{1,2}[\.\/]\d{2,4}(?:[ T]\d{1,2}:\d{2}(?::\d{2})?)?$/.test(sv) ||
+                         /^\d{4}-\d{2}-\d{2}(?:[ T]\d{2}:\d{2}(?::\d{2})?)?$/.test(sv);
+          if (isBool) std['Uzamčení_bool'] = v;
+          else if (isDate) std['Uzamčení_time'] = v;
+        });
+      }
+      return std;
+    }
+
+    function parseDateFlexible(ts){
+      if (ts instanceof Date) return ts;
+      if (typeof ts === 'number' && !Number.isNaN(ts)){
+        const excelEpoch = new Date(Date.UTC(1899,11,30));
+        return new Date(excelEpoch.getTime() + ts*24*60*60*1000);
+      }
+      if (typeof ts !== 'string') return null;
+      const s = ts.trim(); if (!s) return null;
+      const n = new Date(s); if (!isNaN(n)) return n;
+      const m = s.match(/^(\d{1,2})[\.\/](\d{1,2})[\.\/](\d{2,4})(?:[ T](\d{1,2})(?::(\d{2})(?::(\d{2}))?)?)?$/);
+      if (m){
+        const d = parseInt(m[1],10); const mo = parseInt(m[2],10)-1; const y = parseInt(m[3].length===2?('20'+m[3]):m[3],10);
+        const hh = parseInt(m[4]||'0',10); const mm = parseInt(m[5]||'0',10); const ss = parseInt(m[6]||'0',10);
+        return new Date(y, mo, d, hh, mm, ss);
+      }
+      return null;
+    }
+
+    function normalizeDriver(obj){
+      return obj['Řidič'] || obj['Ridic'] || obj['ridic'] || obj['řidič'] || obj['Operator'] || obj['Operátor'] || obj['Driver'] || obj['User'] || '';
+    }
+    function toBool(v){ const s=String(v===undefined||v===null?'':v).trim().toLowerCase(); if (!s) return false; if (['0','false','no','ne','off'].includes(s)) return false; if (['1','true','yes','ano','y','t','on','x'].includes(s)) return true; return false; }
+    function toNum(v){ if (v===undefined||v===null||v==='') return null; if (typeof v==='number') return isNaN(v)?null:v; const s=String(v).trim().replace(',', '.'); const n=parseFloat(s); return isNaN(n) ? null : n; }
+    function normStr(val){ if (val===undefined || val===null) return ''; let s=String(val); try { s = s.normalize('NFD').replace(/[\u0300-\u036f]/g, ''); } catch(e){} return s.toLowerCase().trim(); }
+    function normalizeSeverity(sevText){ if (!sevText) return ''; const s=String(sevText).toLowerCase().trim(); if (/^n(í|i)zk(ý|y)$/.test(s) || /^nizky$/.test(s) || /^low$/.test(s)) return 'Nízký'; if (/^st(ř|r)edn(í|i)$/.test(s) || /^stredni$/.test(s) || /^medium$/.test(s)) return 'Střední'; if (/^vysok(ý|y)$/.test(s) || /^vysoky$/.test(s) || /^high$/.test(s)) return 'Vysoký'; return ''; }
+
+    document.getElementById('langToggle').addEventListener('click', ()=>{ LANG = (LANG==='cz'?'en':'cz'); 
+    // Generic CSV/XLSX export for any entity
+    function exportEntityCsv(entityType, name, incidents){
+      const thirdHeader = (entityType!=='Řidič'?'Ridic':'Stroj');
+      const headers=[entityType,'DatumCas','Zavaznost', thirdHeader ,'Model','Uzamceni','Jizda','Zdvih','Rychlost','BDI','X','Y'];
+      const rows = incidents.map(function(i){
+        const lock = (typeof i._lock !== 'undefined') ? i._lock : false;
+        const thirdVal = (entityType!=='Řidič' ? (i._driver || normalizeDriver(i) || '') : (i['Stroj']||''));
+        return [ name, fmtDateTime(i.dateObj), (i.rawSeverity||i.severity||''), thirdVal, i['Model']||'', (lock?1:0), (i._ride?1:0), (i._lift?1:0), (i._speed??''), (i._bdi??''), (i._x??''), (i._y??'') ];
+      });
+      const csvContent=[headers.join(','), rows.map(function(r){ return r.join(','); }).join('\n')].join('\n');
+      const blob = new Blob([csvContent], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='incidents_'+entityType+'_'+name+'.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+    function exportEntityXlsx(entityType, name, incidents){
+      const thirdHeader = (entityType!=='Řidič'?'Ridic':'Stroj');
+      const aoa = [[entityType,'DatumCas','Zavaznost', thirdHeader ,'Model','Uzamceni','Jizda','Zdvih','Rychlost','BDI','X','Y']];
+      incidents.forEach(function(i){ const thirdVal = (entityType!=='Řidič' ? (i._driver || normalizeDriver(i) || '') : (i['Stroj']||'') ); aoa.push([ name, fmtDateTime(i.dateObj), (i.rawSeverity||i.severity||''), thirdVal, i['Model']||'', (i._lock?1:0), (i._ride?1:0), (i._lift?1:0), (i._speed??''), (i._bdi??''), (i._x??''), (i._y??'') ]); });
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Incidents_'+name);
+      XLSX.writeFile(wb, 'incidents_'+entityType+'_'+name+'.xlsx');
+    }
+
+    applyLang(); buildTable(); 
+    // Help modal logic
+    const helpBtn = document.getElementById('helpBtn');
+    const helpModal = document.getElementById('helpModal');
+    const helpBackdrop = document.getElementById('helpBackdrop');
+    const helpCloseBtn = document.getElementById('helpCloseBtn');
+    function openHelp(){ helpModal.classList.add('open'); helpBackdrop.classList.add('open'); }
+    function closeHelp(){ helpModal.classList.remove('open'); helpBackdrop.classList.remove('open'); }
+    if (helpBtn){ helpBtn.addEventListener('click', openHelp); }
+    if (helpBackdrop){ helpBackdrop.addEventListener('click', closeHelp); }
+    if (helpCloseBtn){ helpCloseBtn.addEventListener('click', closeHelp); }
+    // Inline tooltips
+    document.querySelectorAll('[data-help]').forEach(el=>{
+      const txt = el.getAttribute('data-help');
+      el.setAttribute('title', txt);
+      el.classList.add('underline','decoration-dotted');
+      if (el.textContent.trim()===''){ el.textContent = 'ⓘ'; }
+    });
+  });
+
+    function loadFile(file) {
+      const reader = new FileReader();
+      reader.onload = function(evt){
+        try{
+          const data = new Uint8Array(evt.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const sheetName = workbook.SheetNames.includes('Data') ? 'Data' : (workbook.SheetNames.find(function(n){ return !!XLSX.utils.sheet_to_json(workbook.Sheets[n], { header:1 }).length; }) || workbook.SheetNames[0]);
+          const sheet = workbook.Sheets[sheetName];
+          const raw = XLSX.utils.sheet_to_json(sheet, { header: 1, blankrows:false });
+          const found = detectHeader(raw);
+          const headers = found.headers; const startIndex = found.startIndex;
+          if (!headers){ alert(LANG==='cz'?'Hlavička nebyla nalezena.':'Header row not found.'); return; }
+          const rows = raw.slice(startIndex + 1).filter(function(r){ return r.some(function(c){ return c !== undefined && c !== null && String(c).trim() !== ''; }); });
+          const dataObjects = rows.map(function(row){ return mapToStandard(headers, row); });
+          rawAccidentData = dataObjects;
+          // sites
+          try {
+            const sites = Array.from(new Set(rawAccidentData.map(function(it){ return it['Provoz'] || 'Neznámé'; }))).sort();
+            const sel = document.getElementById('siteFilter');
+            sel.innerHTML = '<option value="__ALL__">'+(LANG==='cz'?I18N.cz.all_sites:I18N.en.all_sites)+'</option>' + sites.map(function(s){ return '<option>'+String(s).replace(/</g,'&lt;').replace(/>/g,'&gt;')+'</option>'; }).join('');
+            sel.value = '__ALL__';
+          } catch(e) {}
+          setStatus((LANG==='cz'?'Načteno ':'Loaded ')+ rawAccidentData.length + (LANG==='cz'?' řádků ze sešitu ':' rows from sheet ') + '„' + sheetName + '”.');
+          loadSavedFilters();
+          applyFilters();
+        }catch(e){ console.error(e); alert((LANG==='cz'?'Chyba při načítání souboru: ':'Error while loading file: ') + (e.message||e)); }
+      };
+      reader.readAsArrayBuffer(file);
+    }
+
+    siteFilterEl = document.getElementById('siteFilter');
+    document.getElementById('applyBtn').addEventListener('click', function(){ applyFilters(); });
+    document.getElementById('groupBy').addEventListener('change', function(e){ currentGroupBy = e.target.value; updateChartsAndTable(); });
+    document.getElementById('siteFilter').addEventListener('change', function(){ applyFilters(); });
+
+    document.getElementById('saveFiltersBtn').addEventListener('click', function(){
+      const payload = { dateFrom: document.getElementById('dateFrom').value, dateTo: document.getElementById('dateTo').value, groupBy: document.getElementById('groupBy').value, site: document.getElementById('siteFilter').value };
+      localStorage.setItem('acc_filters', JSON.stringify(payload));
+      setStatus(LANG==='cz'?'Filtry uloženy.':'Filters saved.');
+    });
+    document.getElementById('resetFiltersBtn').addEventListener('click', function(){
+      localStorage.removeItem('acc_filters');
+      document.getElementById('dateFrom').value='';
+      document.getElementById('dateTo').value='';
+      document.getElementById('groupBy').value='Stroj';
+      document.getElementById('siteFilter').value='__ALL__';
+      currentGroupBy='Stroj';
+      applyFilters();
+    });
+    function loadSavedFilters(){
+      try{
+        const raw = localStorage.getItem('acc_filters'); if(!raw) return;
+        const f = JSON.parse(raw);
+        if (f.dateFrom) document.getElementById('dateFrom').value = f.dateFrom;
+        if (f.dateTo) document.getElementById('dateTo').value = f.dateTo;
+        if (f.groupBy) { document.getElementById('groupBy').value = f.groupBy; currentGroupBy = f.groupBy; }
+        if (f.site && document.getElementById('siteFilter').querySelector('option[value="'+f.site+'"]')) document.getElementById('siteFilter').value = f.site;
+      }catch(e){}
+    }
+
+    function applyFilters() {
+      if (!rawAccidentData.length){ setStatus(LANG==='cz'?'Zatím žádná data. Nahraj prosím XLSX.':'No data yet. Please upload XLSX.'); return; }
+      const fromDateEl = document.getElementById('dateFrom');
+      const toDateEl = document.getElementById('dateTo');
+      const fromDate = fromDateEl.value ? new Date(fromDateEl.value) : null;
+      const toDateInput = toDateEl.value; let toDate = null; if (toDateInput) { toDate = new Date(toDateInput); toDate.setHours(23,59,59,999); }
+      const selectedSite = (siteFilterEl && siteFilterEl.value) ? siteFilterEl.value : '__ALL__';
+      let __diagIdx = -1;
+      parsedData = rawAccidentData.map(function(item, idx){
+        __diagIdx = idx;
+        const sevSource = item['Úroveň nárazu'] || item['Úrověň nárazu'] || item['Uroven narazu'] || item['ÚROVEŇ NÁRAZU'] || '';
+        const severity = normalizeSeverity(sevSource);
+        const rawSeverity = String(sevSource||'').trim();
+        const ts = item['Čas nárazu'] || item['Cas narazu'] || item['Datum'] || item['Datum/čas'] || item['Date'] || item['Timestamp'] || item['Event Time'] || item['Time'] || item['EventTime'] || item['Occured At'] || item['Occurred At'];
+        const __rawTs = ts;
+        const dateObj = parseDateFlexible(ts);
+        if (DEBUG && __diagIdx < 200) {
+          if (dateObj instanceof Date && !isNaN(dateObj)) {
+            const dow = (dateObj.getDay()+6)%7; const hour = dateObj.getHours();
+            safeLog('row', __diagIdx, {ts: __rawTs, parsed: dateObj.toISOString ? dateObj.toISOString() : String(dateObj), dow, hour});
+          } else {
+            safeLog('row', __diagIdx, {ts: __rawTs, parsed: null});
+          }
+        }
+        const _driver = normalizeDriver(item);
+        return Object.assign({}, item, {
+          severity: severity, rawSeverity: rawSeverity, dateObj: dateObj, _driver: _driver,
+          _lock: (function(){
+            const b = item['Uzamčení_bool'];
+            if (b !== undefined){
+              const s = String(b).trim().toLowerCase();
+              if (['ne','no','false','0','off'].includes(s)) return false;
+              if (['ano','yes','true','1','on'].includes(s)) return true;
+            }
+            const primary = item['Uzamčení'] ?? item['Uzamceni'];
+            if (primary!==undefined && primary!==null && String(primary).trim()!==''){
+              const s = String(primary).trim().toLowerCase();
+              if (['0','false','no','ne','off'].includes(s)) return false;
+              return true;
+            }
+            const fallback = item['Locked'] ?? item['Lock'] ?? item['Lockout'] ?? item['Zámek'] ?? item['Zamek'];
+            return toBool(fallback);
+          })(),
+          _ride: toBool(item['Jízda']||item['Jizda']||item['Ride']||item['Drive']||item['Travel']||item['Movement']),
+          _lift: toBool(item['Zdvih']||item['Lift']||item['Hoist']),
+          _speed: toNum(item['Rychlost']||item['Speed']||item['Max Speed']||item['Avg Speed']),
+          _bdi: toNum(item['BDI']||item['Impact']||item['Impact Strength']||item['Force']||item['Síla nárazu']||item['Sila narazu']),
+          _x: toNum(item['X']||item['X-axis']||item['Accel X']||item['Force X']),
+          _y: toNum(item['Y']||item['Y-axis']||item['Accel Y']||item['Force Y'])
+        });
+      }).filter(function(item){
+        if (item.dateObj){ if (fromDate && item.dateObj < fromDate) return false; if (toDate && item.dateObj > toDate) return false; }
+        if (selectedSite !== '__ALL__'){ if ((item['Provoz']||'Neznámé') !== selectedSite) return false; }
+        return true;
+      });
+
+      updateChartsAndTable();
+      if (!parsedData.length){
+        setStatus(LANG==='cz'?'Žádné záznamy pro aktuální filtry. Zvaž reset.':'No records for current filters. Consider reset.');
+      }
+    }
+
+    function computePercentile(arr, p){
+      if (!arr.length) return null;
+      const a = arr.slice().sort((x,y)=>x-y);
+      const idx = (a.length-1)*p;
+      const lo = Math.floor(idx), hi = Math.ceil(idx);
+      if (lo===hi) return a[lo];
+      return a[lo] + (a[hi]-a[lo])*(idx-lo);
+    }
+
+    function updateChartsAndTable() {
+      const groupMap = {};
+      parsedData.forEach(function(item){
+        let key;
+        if (currentGroupBy==='Řidič') key = item._driver || 'Neznámé'; else key = item[currentGroupBy] || 'Neznámé';
+        if (!groupMap[key]) groupMap[key] = { total: 0, nizky: 0, stredni: 0, vysoky: 0,
+          lock:0, ride:0, lift:0, speedSum:0, speedCnt:0, bdiSum:0, bdiCnt:0, xSum:0, xCnt:0, ySum:0, yCnt:0 };
+        groupMap[key].total++;
+        if (item.severity === 'Nízký') groupMap[key].nizky++;
+        else if (item.severity === 'Střední') groupMap[key].stredni++;
+        else if (item.severity === 'Vysoký') groupMap[key].vysoky++;
+        if (item._lock) groupMap[key].lock++;
+        if (item._ride) groupMap[key].ride++;
+        if (item._lift) groupMap[key].lift++;
+        if (item._speed!==null){ groupMap[key].speedSum+=item._speed; groupMap[key].speedCnt++; }
+        if (item._bdi!==null){ groupMap[key].bdiSum+=item._bdi; groupMap[key].bdiCnt++; }
+        if (item._x!==null){ groupMap[key].xSum+=item._x; groupMap[key].xCnt++; }
+        if (item._y!==null){ groupMap[key].ySum+=item._y; groupMap[key].yCnt++; }
+      });
+      summary = Object.keys(groupMap).map(function(key){
+        const g = groupMap[key];
+        function avg(sum,cnt){ return cnt? Math.round((sum/cnt)*100)/100 : null; }
+        const idxVal = g.total? Math.round(((g.nizky*1 + g.stredni*2 + g.vysoky*3) / g.total)*100)/100 : null;
+        const risk = (g.nizky*1 + g.stredni*2 + g.vysoky*3);
+        return { group: key, total: g.total, nizky: g.nizky, stredni: g.stredni, vysoky: g.vysoky, lock: g.lock, ride: g.ride, lift: g.lift, speed: avg(g.speedSum,g.speedCnt), bdi: avg(g.bdiSum,g.bdiCnt), x: avg(g.xSum,g.xCnt), y: avg(g.ySum,g.yCnt), idx: idxVal, risk: risk };
+      });
+      summary.sort(function(a,b){
+        const ka = a[sortKey]; const kb = b[sortKey];
+        let cmp = 0;
+        if (ka===null||ka===undefined) cmp = (kb===null||kb===undefined)?0:1;
+        else if (kb===null||kb===undefined) cmp = -1;
+        else if (typeof ka==='string') cmp = ka.localeCompare(kb, 'cs');
+        else cmp = (ka - kb);
+        if (sortDir==='desc') cmp = -cmp;
+        return cmp || ((b.total - a.total) || ((b.idx||0)-(a.idx||0)));
+      });
+      buildTable();
+      buildStackChart();
+      buildTrendChart();
+      
+      buildTopRisk();
+
+      const show = summary.length > 0;
+      document.getElementById('summarySection').style.display = show ? 'block' : 'none';
+      document.getElementById('chartsSection').style.display = (parsedData.length>0) ? 'block' : 'none';
+      document.getElementById('exportCsvBtn').classList.toggle('hidden', !show);
+      document.getElementById('exportXlsxBtn').classList.toggle('hidden', !show);
+      document.getElementById('driverHint').classList.toggle('hidden', currentGroupBy!=='Řidič');
+    }
+
+    
+    function buildTopRisk(){
+      const wrap = document.getElementById('topRiskWrap');
+      const section = document.getElementById('topRiskSection');
+      wrap.innerHTML='';
+      if (!summary.length){ section.style.display='none'; return; }
+      // Sort by risk desc, tie-breaker by total
+      const top = summary.slice().sort((a,b)=> (b.risk - a.risk) || (b.total - a.total)).slice(0, topN);
+      top.forEach(function(r){
+        const card = document.createElement('div');
+        card.className = 'card-lg border';
+        const title = document.createElement('div');
+        title.className = 'title-lg font-semibold mb-2 truncate';
+        title.textContent = r.group;
+        const pills = document.createElement('div');
+        pills.className = 'sev-stack';
+        const pLow = document.createElement('span'); pLow.className='sev-pill sev-low'; pLow.innerHTML = 'Nízké <small>'+r.nizky+'</small>';
+        const pMid = document.createElement('span'); pMid.className='sev-pill sev-mid'; pMid.innerHTML = 'Střední <small>'+r.stredni+'</small>';
+        const pHigh= document.createElement('span'); pHigh.className='sev-pill sev-high'; pHigh.innerHTML = 'Vysoké <small>'+r.vysoky+'</small>';
+        pills.appendChild(pLow); pills.appendChild(pMid); pills.appendChild(pHigh);
+        const meta = document.createElement('div');
+        meta.className = 'meta-lg text-slate-600';
+        meta.innerHTML = 'Skóre: <b>'+r.risk+'</b> &nbsp;•&nbsp; Počet nehod: <b>'+r.total+'</b> &nbsp;•&nbsp; Index: <b>'+(r.idx??'—')+'</b>';
+        card.appendChild(title); card.appendChild(pills); card.appendChild(meta);
+        wrap.appendChild(card);
+      });
+      section.style.display = top.length? 'block':'none';
+      // Set dynamic title
+      const h2 = section.querySelector('h2'); if (h2){ h2.firstChild.textContent = (LANG==='cz'? 'Top ' + topN + ' nejrizikovějších skupin (skóre 1/2/3)': 'Top ' + topN + ' riskiest groups (score 1/2/3)'); }
+      // Toggle buttons
+      const b3 = document.getElementById('btnTop3'); const b5 = document.getElementById('btnTop5');
+      if (b3 && b5){ b3.classList.toggle('bg-slate-900', topN===3); b3.classList.toggle('text-white', topN===3); b5.classList.toggle('bg-slate-900', topN===5); b5.classList.toggle('text-white', topN===5); }
+    }
+
+
+    function buildTable() {
+      const thead = document.querySelector('#summaryTable thead');
+      const tbody = document.querySelector('#summaryTable tbody');
+      thead.innerHTML = '';
+      const headerRow = document.createElement('tr');
+      const labels = I18N[LANG];
+      
+      
+      const HELP = {
+        group: 'Skupina dle volby (Stroj/Model/Řidič/Provoz). Klik otevře detail. / Group as selected. Click to open detail.',
+        total: 'Celkový počet nehod ve skupině. / Total incidents in group.',
+        nizky: 'Počet nízkých. / Count of Low.',
+        stredni: 'Počet středních. / Count of Medium.',
+        vysoky: 'Počet vysokých. / Count of High.',
+        lock: 'Incidenty s uzamčením (>0 zvýrazněno červeně). / Incidents with lock engaged.',
+        ride: 'Incidenty s jízdou (Drive/Travel). / Incidents with ride movement.',
+        lift: 'Incidenty se zdvihem (Lift/Hoist). / Incidents with lift.',
+        speed: 'Průměrná rychlost z dostupných hodnot (2 d.p.), ≥P80 zvýrazněno. / Avg speed, ≥P80 highlighted.',
+        bdi: 'Průměrná síla nárazu/BDI (2 d.p.), ≥P80 zvýrazněno. / Avg impact (BDI).',
+        x: 'Průměrná síla osa X. / Avg X-axis force.',
+        y: 'Průměrná síla osa Y. / Avg Y-axis force.',
+        idx: 'Index = (1×Nízké + 2×Střední + 3×Vysoké) / počet. / Severity index.'
+      };
+const cols = [
+        {k:'group', t:labels.col_group},
+        {k:'total', t:labels.col_count},
+        {k:'nizky', t:labels.col_low},
+        {k:'stredni', t:labels.col_mid},
+        {k:'vysoky', t:labels.col_high},
+        {k:'lock', t:labels.col_lock},
+        {k:'ride', t:labels.col_ride},
+        {k:'lift', t:labels.col_lift},
+        {k:'speed', t:labels.col_speed},
+        {k:'bdi', t:labels.col_bdi},
+        {k:'x', t:labels.col_x},
+        {k:'y', t:labels.col_y},
+        {k:'idx', t:labels.col_index}
+      ];
+      cols.forEach(function(c){
+        const th = document.createElement('th'); th.className = 'text-left px-3 py-2 sortable'; th.dataset.key=c.k;
+        const tip = HELP[c.k]||'';
+        th.innerHTML = '<span>'+c.t+'</span>'+
+          '<span class="ml-1 text-slate-400 cursor-help" data-help="'+(tip.replace(/&/g,'&amp;').replace(/"/g,'&quot;'))+'"></span>'+
+          '<span class="arrow">'+(sortKey===c.k?(sortDir==='asc'?'▲':'▼'):'')+'</span>';
+        headerRow.appendChild(th);
+      });
+
+      thead.appendChild(headerRow);
+      tbody.innerHTML = '';
+
+      thead.querySelectorAll('th.sortable').forEach(function(th){
+        th.onclick = function(){
+          const k = th.dataset.key;
+          if (!k) return;
+          if (sortKey===k){ sortDir = (sortDir==='asc'?'desc':'asc'); } else { sortKey = k; sortDir='desc'; }
+          buildTable(); // just rebuild table; charts rely on summary order only for stack labels; optional: rebuild charts if needed
+        };
+      });
+
+
+      const speeds = summary.map(r=>r.speed).filter(v=>v!==null);
+      const bdis = summary.map(r=>r.bdi).filter(v=>v!==null);
+      const speedP80 = computePercentile(speeds, 0.8);
+      const bdiP80 = computePercentile(bdis, 0.8);
+
+      summary.forEach(function(row){
+        const tr = document.createElement('tr');
+        ['group','total','nizky','stredni','vysoky','lock','ride','lift','speed','bdi','x','y','idx'].forEach(function(key){
+          const td = document.createElement('td'); td.className = 'px-3 py-1';
+          if (key==='group'){
+            const a = document.createElement('button'); a.className = 'underline text-indigo-600 hover:text-indigo-500'; a.textContent = row[key]; a.addEventListener('click', function(){ openEntityModal(currentGroupBy, row[key]); }); td.appendChild(a);
+          } else {
+            if (key==='nizky'){ td.className += ' sev-low'; }
+            if (key==='stredni'){ td.className += ' sev-mid'; }
+            if (key==='vysoky'){ td.className += ' sev-high'; }
+            if (['speed','bdi','x','y','idx'].includes(key)) {
+              td.textContent = (row[key]===null||row[key]===undefined)? '—' : String(row[key]);
+            } else { td.textContent = row[key]; }
+            if (key==='lock' && Number(row[key]||0) > 0){ td.className += ' text-red-600 font-semibold'; }
+            if (key==='speed' && speedP80!==null && row[key]!==null && row[key]>=speedP80){ td.className += ' text-amber-600 font-semibold'; td.title='High vs peers'; }
+            if (key==='bdi' && bdiP80!==null && row[key]!==null && row[key]>=bdiP80){ td.className += ' text-amber-600 font-semibold'; td.title='High vs peers'; }
+          }
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+
+    function buildStackChart() {
+      const emptyEl = document.getElementById('stackEmpty');
+      const ctx = document.getElementById('stackChart').getContext('2d');
+      const labels = summary.map(function(r){ return r.group; }).slice(0,20);
+      const niz = summary.map(function(r){ return r.nizky; }).slice(0,20);
+      const str = summary.map(function(r){ return r.stredni; }).slice(0,20);
+      const vys = summary.map(function(r){ return r.vysoky; }).slice(0,20);
+      if (stackChart) stackChart.destroy();
+      if (!labels.length){ emptyEl.classList.remove('hidden'); return; } else { emptyEl.classList.add('hidden'); }
+      stackChart = new Chart(ctx, {
+        type: 'bar',
+        data: { labels: labels, datasets: [
+          { label: I18N[LANG].col_low, data:niz, backgroundColor:'#60a5fa' },
+          { label: I18N[LANG].col_mid, data:str, backgroundColor:'#facc15' },
+          { label: I18N[LANG].col_high, data:vys, backgroundColor:'#f87171' }
+        ] },
+        options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position:'top' }, tooltip: { enabled:true } }, scales: { x: { stacked:true, ticks:{ autoSkip:false, maxRotation:60, minRotation:45 } }, y: { stacked:true, beginAtZero:true, title:{ display:true, text:I18N[LANG].col_count } } } }
+      });
+    }
+
+    
+function buildTrendChart(){
+  const subtitleEl = document.getElementById("trendSubtitle");
+  const gSel = document.getElementById('granularity');
+  const cBox = document.getElementById('cumToggle');
+  const wBox = document.getElementById('weekendToggle');
+  const exportBtn = document.getElementById('trendExportBtn');
+
+  setTrendControlsFromState();
+  if (gSel) gSel.onchange = ()=>{ trendGranularity = gSel.value; saveTrendState(); buildTrendChart(); };
+  if (cBox) cBox.onchange = ()=>{ trendCumulative = cBox.checked; saveTrendState(); buildTrendChart(); };
+  if (wBox) wBox.onchange = ()=>{ trendWeekend = wBox.checked; saveTrendState(); buildTrendChart(); };
+  if (exportBtn) exportBtn.onclick = exportTrendCsv;
+
+  // date range subtitle
+  if (subtitleEl) {
+    try {
+      const dates = parsedData.map(i=>i.dateObj).filter(d=>d instanceof Date && !isNaN(d)).sort((a,b)=>a-b);
+      if (dates.length) {
+        const f = (d)=>{const y=d.getFullYear();const m=String(d.getMonth()+1).padStart(2,"0");const day=String(d.getDate()).padStart(2,"0");return `${day}.${m}.${y}`;};
+        subtitleEl.textContent = (LANG==="cz" ? "Období: " : "Period: ") + f(dates[0]) + " – " + f(dates[dates.length-1]);
+      } else { subtitleEl.textContent = ""; }
+    } catch(e) { subtitleEl.textContent = ""; }
+  }
+
+  const emptyEl = document.getElementById('trendEmpty');
+  const buckets = {}; const bLow={}, bMid={}, bHigh={};
+
+  parsedData.forEach(function(i){
+    if (!i.dateObj) return;
+    const b = bucketKey(i.dateObj, trendGranularity);
+    if (!b) return;
+    const k = b.key;
+    buckets[k] = (buckets[k]||{label:b.label, sort:b.sort, n:0}); buckets[k].n++;
+    if (i.severity==='Nízký') bLow[k]=(bLow[k]||0)+1;
+    else if (i.severity==='Střední') bMid[k]=(bMid[k]||0)+1;
+    else if (i.severity==='Vysoký') bHigh[k]=(bHigh[k]||0)+1;
+  });
+
+  const keys = Object.keys(buckets).sort((a,b)=> (buckets[a].sort < buckets[b].sort ? -1 : 1));
+  const labels = keys.map(k=>buckets[k].label);
+  let all = keys.map(k=> buckets[k].n || 0);
+  let low = keys.map(k=> bLow[k]||0);
+  let mid = keys.map(k=> bMid[k]||0);
+  let high= keys.map(k=> bHigh[k]||0);
+
+  if (trendCumulative){
+    all = cumulative(all);
+    low = cumulative(low);
+    mid = cumulative(mid);
+    high= cumulative(high);
+  }
+
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+  if (!labels.length){ emptyEl.classList.remove('hidden'); return; } else { emptyEl.classList.add('hidden'); }
+
+  trendChart = new Chart(ctx, {
+    type:'line',
+    data:{
+      labels: labels,
+      datasets:[
+        { label:I18N[LANG].col_count, data:all, tension:0.2, fill:false, borderColor:'#94a3b8', pointRadius:2 },
+        { label:I18N[LANG].col_low, data:low, tension:0.2, fill:false, borderColor:'#60a5fa', pointRadius:2 },
+        { label:I18N[LANG].col_mid, data:mid, tension:0.2, fill:false, borderColor:'#facc15', pointRadius:2 },
+        { label:I18N[LANG].col_high, data:high, tension:0.2, fill:false, borderColor:'#f87171', pointRadius:2 }
+      ]},
+    options:{
+      responsive:true,
+      maintainAspectRatio:false,
+      scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } },
+      plugins:{ legend:{ position:'top' } }
+    },
+    plugins: [weekendHighlighter]
+  });
+
+  // keep current series data for export
+  window.__trendExport = { labels, all, low, mid, high, granularity: trendGranularity, cumulative: trendCumulative };
+}
+
+
+    function buildHeatmap(){
+      const heatDbgEl = document.getElementById('heatDbg');
+
+      const emptyEl = document.getElementById('heatEmpty');
+      const ctx = document.getElementById('heatmapChart').getContext('2d');
+      const counts = {}; let maxVal = 0;
+      parsedData.forEach(function(i){
+        const d = i.dateObj; if (!d) return;
+        const dow = (d.getDay()+6)%7; // Mon=0 ... Sun=6
+        const hour = d.getHours();
+        const key = dow+'|'+hour;
+        counts[key] = (counts[key]||0)+1;
+        if (counts[key]>maxVal) maxVal = counts[key];
+      });
+      const nonZero = Object.values(counts).some(v=>v>0);
+      if (heatDbgEl) {
+        try {
+          const total = parsedData.length;
+          const valid = parsedData.filter(i=>i.dateObj instanceof Date && !isNaN(i.dateObj)).length;
+          heatDbgEl.textContent = `Debug: valid times ${valid}/${total}, non-zero cells ${Object.values(counts).filter(v=>v>0).length}, max cell ${maxVal}`;
+          heatDbgEl.classList.toggle('hidden', !(valid>0));
+        } catch(e) { /* noop */ }
+      }
+      if (DEBUG) {
+        const entries = Object.entries(counts).filter(([,v])=>v>0).sort((a,b)=>b[1]-a[1]).slice(0,10);
+        if (entries.length) safeLog('heatmap top cells (key=dow|hour):', entries);
+      }
+      if (heatmapChart) heatmapChart.destroy();
+      if (!nonZero){ emptyEl.classList.remove('hidden'); return; } else { emptyEl.classList.add('hidden'); }
+      const data = [];
+      for (let w=0; w<7; w++){
+        for (let h=0; h<24; h++){
+          const v = counts[w+'|'+h]||0;
+          data.push({ x:w, y:h, v:v });
+        }
+      }
+      const labelsX = ['Po','Út','St','Čt','Pá','So','Ne'];
+      heatmapChart = new Chart(ctx, {
+        type: 'matrix',
+        data: {
+          datasets: [{
+            label: 'Incidents',
+            data: data,
+            width: ({chart}) => (chart.chartArea || {}).width / 7 - 2,
+            height: ({chart}) => (chart.chartArea || {}).height / 24 - 2,
+            backgroundColor: function(ctx){
+              const v = ctx.dataset.data[ctx.dataIndex].v;
+              const alpha = v===0?0.05:(0.1 + 0.9 * (v/(maxVal||1)));
+              return 'rgba(99,102,241,'+alpha+')';
+            },
+            borderWidth: 1,
+            borderColor: 'rgba(148,163,184,0.3)'
+          }]
+        },
+        options: {
+          responsive:true, maintainAspectRatio:false,
+          scales: { x: { type:'category', labels: labelsX, position:'top', grid:{ display:false } }, y: { type:'linear', min:0, max:23, ticks:{ stepSize:2 }, grid:{ display:false } } },
+          plugins: { legend:{ display:false }, tooltip:{ callbacks: { title:(items)=>{ const d = items[0].raw; return labelsX[d.x] + ' ' + d.y+':00'; }, label:(c)=> { const v=c.raw.v; return (LANG==='cz'?'Nehod: ':'Incidents: ')+v; } } } }
+        }
+      });
+    }
+
+    // Exporty
+    document.getElementById('exportCsvBtn').addEventListener('click', function(){
+      if (!summary.length) return;
+      const L = I18N[LANG];
+      const headers = [L.col_group,L.col_count,L.col_low,L.col_mid,L.col_high,L.col_lock,L.col_ride,L.col_lift,L.col_speed,L.col_bdi,L.col_x,L.col_y,L.col_index];
+      const rows = summary.map(function(r){ return [r.group, r.total, r.nizky, r.stredni, r.vysoky, r.lock, r.ride, r.lift, (r.speed??''), (r.bdi??''), (r.x??''), (r.y??''), (r.idx??'')]; });
+      const csvContent = [headers.join(','), rows.map(function(r){ return r.join(','); }).join('\n')].join('\n');
+      const blob = new Blob([csvContent], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob); const a = document.createElement('a'); a.href = url; a.download = 'accident_summary.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    });
+    document.getElementById('exportXlsxBtn').addEventListener('click', function(){
+      if (!summary.length) return;
+      const L = I18N[LANG];
+      const aoa = [[L.col_group,L.col_count,L.col_low,L.col_mid,L.col_high,L.col_lock,L.col_ride,L.col_lift,L.col_speed,L.col_bdi,L.col_x,L.col_y,L.col_index]];
+      summary.forEach(r=> aoa.push([r.group, r.total, r.nizky, r.stredni, r.vysoky, r.lock, r.ride, r.lift, r.speed, r.bdi, r.x, r.y, r.idx]));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Summary');
+      XLSX.writeFile(wb, 'accident_summary.xlsx');
+    });
+
+    document.getElementById('printBtn').addEventListener('click', function(){ window.print(); });
+
+    const modal = document.getElementById('driverModal');
+    const backdrop = document.getElementById('modalBackdrop');
+    const closeBtn = document.getElementById('closeModalBtn');
+    const exportDriverBtn = document.getElementById('exportDriverBtn');
+    const exportDriverXlsxBtn = document.getElementById('exportDriverXlsxBtn');
+    closeBtn.addEventListener('click', closeDriverModal); backdrop.addEventListener('click', closeDriverModal);
+
+    function openEntityModal(entityType, entityValue){
+      const name = String(entityValue||'').trim();
+      let incidents = [];
+      if (entityType==='Řidič'){
+        const nname = name.normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+        incidents = parsedData.filter(function(x){
+          const v=(x._driver||'').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          if (v===nname) return true;
+          const cand=(x['Řidič']||x['Ridic']||x['řidič']||x['ridic']||x['Operator']||x['Operátor']||x['Driver']||x['User']||'').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+          return cand===nname;
+        });
+      } else if (entityType==='Stroj'){
+        incidents = parsedData.filter(function(x){ return (x['Stroj']||'')===name; });
+      } else if (entityType==='Model'){
+        incidents = parsedData.filter(function(x){ return (x['Model']||'')===name; });
+      } else if (entityType==='Provoz'){
+        incidents = parsedData.filter(function(x){ return (x['Provoz']||'')===name; });
+      }
+      document.getElementById('driverTitle').textContent = (entityType==='Řidič'?'Profil řidiče – ':'Detail – ' + entityType + ' – ') + name + (incidents.length? '' : ' (nenalezeny filtrované záznamy)');
+
+      const total = incidents.length;
+      const low = incidents.filter(function(i){ return i.severity==='Nízký'; }).length;
+      const mid = incidents.filter(function(i){ return i.severity==='Střední'; }).length;
+      const high = incidents.filter(function(i){ return i.severity==='Vysoký'; }).length;
+      const dates = incidents.map(function(i){ return i.dateObj; }).filter(function(d){ return !!d; }).sort(function(a,b){ return a-b; });
+      const firstDate = dates[0] || null; const lastDate = dates.length?dates[dates.length-1]:null;
+      let avgDaysBetween = null; if (dates.length>1){ const diffs=[]; for (let i=1;i<dates.length;i++){ diffs.push((dates[i]-dates[i-1])/(1000*60*60*24)); } avgDaysBetween = Math.round(diffs.reduce(function(a,b){ return a+b; },0)/diffs.length); }
+
+      const summaryEl = document.getElementById('driverSummary'); summaryEl.innerHTML = '';
+      function li(label, value, help){ const el = document.createElement('li'); const h = help? ' data-help="'+String(help).replace(/&/g,'&amp;').replace(/"/g,'&quot;')+'"' : ''; el.innerHTML = '<span class="text-slate-500"'+h+'>'+label+':</span> <b>'+value+'</b>'; return el; }
+      summaryEl.appendChild(li('Celkem nehod', total, 'Počet všech záznamů po aplikaci filtrů. / Total incidents after filters.'));
+      summaryEl.appendChild(li('Nízké / Střední / Vysoké', low+' / '+mid+' / '+high, 'Rozdělení závažnosti. / Severity breakdown.'));
+      summaryEl.appendChild(li('Průměrný rozestup (dny)', (avgDaysBetween!==null)?avgDaysBetween:'—', 'Průměr dnů mezi po sobě jdoucími incidenty. / Avg days between incidents.'));
+      summaryEl.appendChild(li('První / poslední záznam', (firstDate?fmtDate(firstDate):'—')+' / '+(lastDate?fmtDate(lastDate):'—'), 'Rozsah dat v této entitě. / Date span for this entity.'));
+
+      const sevCtx = document.getElementById('severityChart').getContext('2d'); if (severityChart) severityChart.destroy();
+      severityChart = new Chart(sevCtx, { type:'doughnut', data:{ labels:['Nízké','Střední','Vysoké'], datasets:[{ data:[low,mid,high], backgroundColor:['#60a5fa','#facc15','#f87171'] }] }, options:{ responsive:true, plugins:{ legend:{ position:'bottom' } } } });
+
+      const siteCounts = {}; incidents.forEach(i=>{ const s=i['Provoz']||'Neznámé'; siteCounts[s]=(siteCounts[s]||0)+1; });
+      const dsLabels = Object.keys(siteCounts); const dsValues = dsLabels.map(k=>siteCounts[k]);
+      const dsCtx = document.getElementById('driverSitesChart').getContext('2d');
+      if (window.driverSitesChart && typeof window.driverSitesChart.destroy==='function') window.driverSitesChart.destroy();
+      window.driverSitesChart = new Chart(dsCtx, { type:'bar', data:{ labels: dsLabels, datasets:[{ label:'Nehody', data: dsValues, backgroundColor:'#60a5fa' }]}, options:{ responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true, ticks:{ precision:0 } } } } });
+
+      window.__modalEntityType = entityType; fillDriverIncidentsTable(incidents, entityType);
+      exportDriverBtn.onclick = function(){ exportEntityCsv(entityType, name, incidents); };
+      exportDriverXlsxBtn.onclick = function(){ exportEntityXlsx(entityType, name, incidents); };
+      modal.classList.add('open'); backdrop.classList.add('open');
+    }
+
+    function closeDriverModal(){ modal.classList.remove('open'); backdrop.classList.remove('open'); if (driverSitesChart) { driverSitesChart.destroy(); driverSitesChart=null; } if (severityChart){ severityChart.destroy(); severityChart=null; } }
+
+    function renderTopList(items, field, targetId){
+      const map = {}; items.forEach(function(i){ const key = i[field] || 'Neznámé'; map[key]=(map[key]||0)+1; });
+      const arr = Object.entries(map).sort(function(a,b){ return b[1]-a[1]; }).slice(0,8);
+      const ul = document.getElementById(targetId); ul.innerHTML='';
+      arr.forEach(function(pair){ const k=pair[0]; const v=pair[1]; const li=document.createElement('li'); li.textContent = k+': '+v; ul.appendChild(li); });
+    }
+
+    function fillDriverIncidentsTable(incidents, entityType){
+      const tbody = document.querySelector('#driverIncidentsTable tbody');
+      const theadRow = document.querySelector('#driverIncidentsTable thead tr');
+      if (theadRow){ const ths = theadRow.querySelectorAll('th'); if (ths && ths[2]) { const txt = (entityType!=='Řidič' ? 'Řidič' : 'Stroj'); ths[2].innerHTML = txt + ' <span class="ml-1 text-slate-400 cursor-help" data-help="'+(txt==='Řidič'?'Operátor, který událost způsobil. / Driver.':'Identifikátor zařízení/vozíku. / Asset ID.')+'"></span>'; } }
+      const searchInput = document.getElementById('incidentSearch');
+      function fmtNum(v){ if(v===null||v===undefined||v==='') return '—'; const n=Number(v); return Number.isFinite(n)? (Math.round(n*100)/100).toString() : String(v); }
+      function lockFromRaw(i){
+        if (i['Uzamčení_bool'] !== undefined){
+          const s = String(i['Uzamčení_bool']).trim().toLowerCase();
+          if (['ne','no','false','0','off'].includes(s)) return false;
+          if (['ano','yes','true','1','on'].includes(s)) return true;
+        }
+        const primary = i['Uzamčení'] ?? i['Uzamceni'];
+        if (primary!==undefined && primary!==null && String(primary).trim()!==''){
+          const s = String(primary).trim().toLowerCase();
+          if (['0','false','no','ne','off'].includes(s)) return false;
+          return true;
+        }
+        const fallback = i['Locked'] ?? i['Lock'] ?? i['Lockout'] ?? i['Zámek'] ?? i['Zamek'];
+        return toBool(fallback);
+      }
+      function rideFromRaw(i){
+        const raw = i['Jízda']||i['Jizda']||i['Ride']||i['Drive']||i['Travel']||i['Movement'];
+        const s = String(raw===undefined||raw===null?'':raw).trim().toLowerCase();
+        if (!s) return false;
+        return ['1','true','yes','ano','y','t','ride','drive','travel','movement','on','x'].includes(s);
+      }
+      function liftFromRaw(i){
+        const raw = i['Zdvih']||i['Lift']||i['Hoist']||i['Zdvih/Hoist'];
+        const s = String(raw===undefined||raw===null?'':raw).trim().toLowerCase();
+        if (!s) return false;
+        return ['1','true','yes','ano','y','t','lift','hoist','zdvih','on','x'].includes(s);
+      }
+      function render(filterText){
+        const q = (filterText||'').toLowerCase().trim();
+        tbody.innerHTML=''; let shown = 0;
+        incidents.forEach(function(i){
+          const ts = i.dateObj ? fmtDateTime(i.dateObj) : (i['Čas nárazu']||i['Cas narazu']||i['Datum/čas']||i['Datum']||i['Date']||i['Timestamp']||i['Event Time']||i['Time']||i['EventTime']||i['Occured At']||i['Occurred At']||'—').toString();
+          const lock = (typeof i._lock !== 'undefined') ? i._lock : lockFromRaw(i);
+          const ride = (typeof i._ride !== 'undefined') ? i._ride : rideFromRaw(i);
+          const lift = (typeof i._lift !== 'undefined') ? i._lift : liftFromRaw(i);
+          const driverName = (i._driver || normalizeDriver(i) || '');
+          const machineVal = i['Stroj']||'';
+          const rowText = [ts, (i.rawSeverity||i.severity||''), (entityType!=='Řidič'? driverName : machineVal), i['Model']||'', (lock?'ano':'ne'), (ride?'ano':'ne'), (lift?'ano':'ne'), (i._speed??''), (i._bdi??''), (i._x??''), (i._y??'')].join(' ').toLowerCase();
+          if (q && rowText.indexOf(q)===-1) return;
+          const tr=document.createElement('tr');
+          const cells=[ ts, (i.rawSeverity||i.severity||''), (entityType!=='Řidič'? (i._driver || normalizeDriver(i) || '') : (i['Stroj']||'')), i['Model']||'', (lock?'Ano':'Ne'), (ride?'Ano':'Ne'), (lift?'Ano':'Ne'), fmtNum(i._speed), fmtNum(i._bdi), fmtNum(i._x), fmtNum(i._y) ];
+          cells.forEach(function(c, idx){
+            const td=document.createElement('td'); td.className='px-2 py-1'; td.textContent=c;
+            if (idx===1){ const s = String(i.severity||i.rawSeverity||'').toLowerCase();
+              if (s.includes('vys')) td.className+=' text-red-600 font-semibold';
+              else if (s.includes('stř')||s.includes('stred')) td.className+=' text-amber-600 font-semibold';
+              else if (s.includes('níz')||s.includes('niz')) td.className+=' text-blue-600 font-semibold';
+            }
+            if (idx===4 && String(c).toLowerCase()==='ano'){ td.className += ' text-red-600 font-semibold'; }
+            tr.appendChild(td);
+          });
+          tbody.appendChild(tr); shown++; if (shown>=200) return;
+        });
+      }
+      render('');
+      if (searchInput) searchInput.oninput = function(e){ render(e.target.value); };
+    }
+
+    function exportDriverCsv(name, incidents){
+      const headers=['Ridic','DatumCas','Zavaznost','Stroj','Model','Uzamceni','Jizda','Zdvih','Rychlost','BDI','X','Y'];
+      const rows = incidents.map(function(i){
+        const lock = (typeof i._lock !== 'undefined') ? i._lock : false;
+        return [ name, fmtDateTime(i.dateObj), (i.rawSeverity||i.severity||''), i['Stroj']||'', i['Model']||'', (lock?1:0), (i._ride?1:0), (i._lift?1:0), (i._speed??''), (i._bdi??''), (i._x??''), (i._y??'') ];
+      });
+      const csvContent=[headers.join(','), rows.map(function(r){ return r.join(','); }).join('\n')].join('\n');
+      const blob = new Blob([csvContent], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='incidents_'+name+'.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+
+    function exportDriverXlsx(name, incidents){
+      const aoa = [['Ridic','DatumCas','Zavaznost','Stroj','Model','Uzamceni','Jizda','Zdvih','Rychlost','BDI','X','Y']];
+      incidents.forEach(i=> aoa.push([ name, fmtDateTime(i.dateObj), (i.rawSeverity||i.severity||''), i['Stroj']||'', i['Model']||'', (i._lock?1:0), (i._ride?1:0), (i._lift?1:0), (i._speed??''), (i._bdi??''), (i._x??''), (i._y??'') ]));
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Incidents_'+name);
+      XLSX.writeFile(wb, 'incidents_'+name+'.xlsx');
+    }
+
+    
+    // Generic CSV/XLSX export for any entity
+    function exportEntityCsv(entityType, name, incidents){
+      const thirdHeader = (entityType!=='Řidič'?'Ridic':'Stroj');
+      const headers=[entityType,'DatumCas','Zavaznost', thirdHeader ,'Model','Uzamceni','Jizda','Zdvih','Rychlost','BDI','X','Y'];
+      const rows = incidents.map(function(i){
+        const lock = (typeof i._lock !== 'undefined') ? i._lock : false;
+        const thirdVal = (entityType!=='Řidič' ? (i._driver || normalizeDriver(i) || '') : (i['Stroj']||''));
+        return [ name, fmtDateTime(i.dateObj), (i.rawSeverity||i.severity||''), thirdVal, i['Model']||'', (lock?1:0), (i._ride?1:0), (i._lift?1:0), (i._speed??''), (i._bdi??''), (i._x??''), (i._y??'') ];
+      });
+      const csvContent=[headers.join(','), rows.map(function(r){ return r.join(','); }).join('\n')].join('\n');
+      const blob = new Blob([csvContent], { type:'text/csv;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='incidents_'+entityType+'_'+name+'.csv';
+      document.body.appendChild(a); a.click(); document.body.removeChild(a);
+    }
+    function exportEntityXlsx(entityType, name, incidents){
+      const thirdHeader = (entityType!=='Řidič'?'Ridic':'Stroj');
+      const aoa = [[entityType,'DatumCas','Zavaznost', thirdHeader ,'Model','Uzamceni','Jizda','Zdvih','Rychlost','BDI','X','Y']];
+      incidents.forEach(function(i){ const thirdVal = (entityType!=='Řidič' ? (i._driver || normalizeDriver(i) || '') : (i['Stroj']||'') ); aoa.push([ name, fmtDateTime(i.dateObj), (i.rawSeverity||i.severity||''), thirdVal, i['Model']||'', (i._lock?1:0), (i._ride?1:0), (i._lift?1:0), (i._speed??''), (i._bdi??''), (i._x??''), (i._y??'') ]); });
+      const ws = XLSX.utils.aoa_to_sheet(aoa);
+      const wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'Incidents_'+name);
+      XLSX.writeFile(wb, 'incidents_'+entityType+'_'+name+'.xlsx');
+    }
+
+    applyLang();
+    const btn3=document.getElementById('btnTop3'); const btn5=document.getElementById('btnTop5');
+    if (btn3) btn3.onclick = function(){ topN=3; localStorage.setItem('acc_topN','3'); buildTopRisk(); };
+    if (btn5) btn5.onclick = function(){ topN=5; localStorage.setItem('acc_topN','5'); buildTopRisk(); };
+    window.__accidentApp = { openEntityModal: openEntityModal };
+  
+function exportTrendCsv(){
+  const d = window.__trendExport; if (!d) return;
+  const headers = ['Bucket','All','Low','Medium','High','Granularity','Cumulative'];
+  const lines = [headers.join(',')];
+  for (let i=0;i<d.labels.length;i++){
+    const row = [d.labels[i], d.all[i]||0, d.low[i]||0, d.mid[i]||0, d.high[i]||0, d.granularity, d.cumulative?1:0];
+    lines.push(row.join(','));
+  }
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download='trend_series.csv';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+}
+
+</script>
+
+  <div id="helpBackdrop" class="modal-backdrop"></div>
+  <div id="helpModal" class="modal">
+    <div class="max-w-4xl w-[95vw] md:w-[70vw] max-h-[90vh] overflow-auto rounded-2xl bg-white shadow-xl">
+      <div class="p-4 border-b flex items-center justify-between sticky top-0 bg-white z-10">
+        <h3 class="text-lg font-semibold">Nápověda • Help</h3>
+        <div class="flex items-center gap-2">
+          <button id="helpCloseBtn" class="rounded-lg bg-slate-900 text-white px-3 py-1.5 text-sm">Zavřít / Close</button>
+        </div>
+      </div>
+      <div class="p-4 space-y-5 text-sm leading-relaxed">
+        <div>
+          <h4 class="font-semibold mb-1">Mini‑legenda / Mini legend</h4>
+          <ul class="list-disc ml-5">
+            <li><b>Uzamčení (Lock)</b>: 1 pokud sloupec obsahuje pravdivou hodnotu (1/true/yes/ano/on/x) nebo čas zámku; 0 pro prázdné/0/no/ne.</li>
+            <li><b>Jízda (Ride)</b>: 1 pro hodnoty (1/true/yes/ano/ride/drive/travel/movement/on/x), jinak 0.</li>
+            <li><b>Zdvih (Lift)</b>: 1 pro (1/true/yes/ano/lift/hoist), jinak 0.</li>
+            <li><b>Závažnost</b>: normalizace na Nízké / Střední / Vysoké (podporuje i Low/Medium/High).</li>
+            <li><b>Index závažnosti</b>: (1×Nízké + 2×Střední + 3×Vysoké) / počet incidentů.</li>
+            <li><b>Průměry (Rychlost/BDI/X/Y)</b>: aritmetický průměr jen z dostupných hodnot, 2 desetinná místa.</li>
+            <li><b>P80 zvýraznění</b>: hodnoty ≥ 80. percentilu v souhrnné tabulce jsou zvýrazněny.</li>
+            <li><b>Trend – granularita</b>: Měsíce/Týdny/Dny dle přepínače; volba se ukládá.</li>
+            <li><b>Trend – kumulativně</b>: započítává průběžný součet v čase.</li>
+            <li><b>Trend – víkendy</b>: u denního pohledu šrafuje sobotu a neděli.</li>
+            <li><b>Exporty</b>: Summary (CSV/XLSX), Detail entity (CSV/XLSX), Trend série (CSV).</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">1) Zdroj dat / Data source</h4>
+          <ul class="list-disc ml-5">
+            <li>Načti XLSX s reportem; hlavička se rozpozná podle aliasů (Stroj/Model/Řidič/Provoz/Čas nárazu/Úroveň nárazu/Uzamčení/Jízda/Zdvih/Rychlost/BDI/X/Y).</li>
+            <li>Header is auto-detected via aliases; first data row is everything after the detected header line.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">2) Parsování času / Time parsing</h4>
+          <ul class="list-disc ml-5">
+            <li>Přijímané formáty: Excel serial, ISO, DD.MM.YYYY[ HH:MM[:SS]], další běžné textové varianty.</li>
+            <li>Accepted formats include Excel serial, ISO, DD.MM.YYYY[ HH:MM[:SS]].</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">3) Normalizace závažnosti / Severity normalization</h4>
+          <ul class="list-disc ml-5">
+            <li>„Nízké / Střední / Vysoké“ se mapují z českých i anglických variant (Low/Medium/High).</li>
+            <li>Values normalized to: Low / Medium / High (Czech & English).</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">4) Uzamčení / Jízda / Zdvih (Lock/Ride/Lift)</h4>
+          <ul class="list-disc ml-5">
+            <li>Uzamčení: nejprve boolean sloupec („Uzamčení_bool“), pak text/čas („Uzamčení“, „Uzamceni“, „Locked/Lock/Lockout…“). Prázdné & 0/false/no/ne = 0, jinak 1.</li>
+            <li>Ride/Lift: libovolná pravdivá hodnota (1/true/yes/ano/ride/drive/travel/movement/on/x) =&gt; 1, jinak 0.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">5) Průměry rychlost/BDI/X/Y / Averages</h4>
+          <ul class="list-disc ml-5">
+            <li>Průměr = aritmetický průměr z dostupných hodnot (ignoruje prázdné). Zobrazuje se na 2 desetinná místa.</li>
+            <li>Average is arithmetic mean of available values (nulls ignored), rounded to 2 decimals.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">6) Index & skóring / Index & scoring</h4>
+          <ul class="list-disc ml-5">
+            <li><b>Index závažnosti</b> = (1×Nízké + 2×Střední + 3×Vysoké) / počet nehod.</li>
+            <li><b>Skóre rizika</b> (Top sekce) = 1×Nízké + 2×Střední + 3×Vysoké, seřazeno sestupně, shoda se láme počtem nehod.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">7) Skupiny & filtry / Groups & filters</h4>
+          <ul class="list-disc ml-5">
+            <li>Skupina: Stroj / Model / Řidič / Provoz.</li>
+            <li>Filtry: datum od–do, Provoz. Uložené do localStorage.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">8) Trend / Trend</h4>
+          <ul class="list-disc ml-5">
+            <li>Agregace po měsících v aktivním období (po filtraci). Podnadpis ukazuje přesné datumové hranice.</li>
+            <li>Monthly aggregation within filtered period; subtitle shows exact range.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">9) Souhrnná tabulka / Summary table</h4>
+          <ul class="list-disc ml-5">
+            <li>Řaditelné záhlaví; zvýraznění: „Uzamčení&gt;0“ červeně; vysoké rychlosti/BDI (>= P80) oranžově.</li>
+            <li>Clickable „Skupina“ otevírá detail (dle aktuálního výběru skupiny).</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">10) Detail entity / Entity detail</h4>
+          <ul class="list-disc ml-5">
+            <li>Souhrn + koláč závažnosti + rozdělení podle provozů + posledních 200 záznamů.</li>
+            <li>Export CSV/XLSX pro právě otevřenou entitu.</li>
+          </ul>
+        </div>
+        <div>
+          <h4 class="font-semibold mb-1">11) Exporty / Exports</h4>
+          <ul class="list-disc ml-5">
+            <li>Souhrn: „Exportovat CSV/XLSX“ vpravo nahoře.</li>
+            <li>Detail: tlačítka „Export CSV/XLSX“ v modalu.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+
+
+<script>
+// --- Click-to-sort for tables (summary & driver incidents) ---
+(function(){
+  function parseCell(text, colIdx, tableId){
+    if (!text) return {v: "", n: NaN, d: NaN};
+    const t = String(text).trim();
+    // Percent -> number
+    const pct = t.replace(',', '.').replace('%','');
+    if (/^[-+]?\d+(\.\d+)?%?$/.test(t) || /^[-+]?\d+(,\d+)?%?$/.test(t)){
+      const n = parseFloat(pct);
+      return {v: t, n: isNaN(n) ? NaN : n, d: NaN};
+    }
+    // Date (first column in driver incidents)
+    const d = Date.parse(t);
+    if (!isNaN(d)) return {v: t, n: NaN, d};
+    // Plain number
+    const num = parseFloat(pct);
+    if (!isNaN(num)) return {v: t, n: num, d: NaN};
+    return {v: t.toLowerCase(), n: NaN, d: NaN};
+  }
+
+  function makeSortable(tableId){
+    const table = document.getElementById(tableId);
+    if (!table) return;
+    const thead = table.tHead;
+    const tbody = table.tBodies && table.tBodies[0];
+    if (!thead || !tbody) return;
+
+    // Add pointer cursor
+    Array.from(thead.querySelectorAll('th')).forEach(th => th.classList.add('cursor-pointer'));
+
+    // State
+    table.__sortState = table.__sortState || {col:null, asc:true};
+
+    thead.addEventListener('click', (e)=>{
+      const th = e.target.closest('th');
+      if (!th) return;
+      const col = Array.from(th.parentNode.children).indexOf(th);
+      const asc = (table.__sortState.col===col) ? !table.__sortState.asc : true;
+      table.__sortState = {col, asc};
+
+      // Collect rows
+      const rows = Array.from(tbody.querySelectorAll('tr'));
+      const mapped = rows.map(tr => {
+        const cell = tr.children[col];
+        const text = cell ? cell.textContent : '';
+        return {tr, key: parseCell(text, col, tableId)};
+      });
+
+      // Choose comparator
+      mapped.sort((a,b)=>{
+        // prefer numeric
+        if (!isNaN(a.key.n) || !isNaN(b.key.n)){
+          const va = isNaN(a.key.n) ? -Infinity : a.key.n;
+          const vb = isNaN(b.key.n) ? -Infinity : b.key.n;
+          return asc ? (va - vb) : (vb - va);
+        }
+        // then by date
+        if (!isNaN(a.key.d) || !isNaN(b.key.d)){
+          const va = isNaN(a.key.d) ? -Infinity : a.key.d;
+          const vb = isNaN(b.key.d) ? -Infinity : b.key.d;
+          return asc ? (va - vb) : (vb - va);
+        }
+        // fallback string
+        const va = a.key.v; const vb = b.key.v;
+        return asc ? va.localeCompare(vb) : vb.localeCompare(va);
+      });
+
+      // Update arrow indicators
+      Array.from(thead.querySelectorAll('th')).forEach((h,i)=>{
+        const base = h.getAttribute('data-label') || h.textContent.replace(/[▲▼]/g,'').trim();
+        h.setAttribute('data-label', base);
+        if (i===col){
+          h.textContent = base + (asc ? ' ▲':' ▼');
+        } else {
+          h.textContent = base;
+        }
+      });
+
+      // Re-append in order
+      const frag = document.createDocumentFragment();
+      mapped.forEach(m=> frag.appendChild(m.tr));
+      tbody.innerHTML = '';
+      tbody.appendChild(frag);
+    });
+  }
+
+  // Attach after DOM ready
+  function initSortables(){
+    makeSortable('summaryTable');
+    makeSortable('driverIncidentsTable');
+  }
+  if (document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', initSortables);
+  } else {
+    initSortables();
+  }
+
+  // Re-attach after dynamic re-renders: observe header replacements
+  const mo = new MutationObserver(()=>{
+    makeSortable('summaryTable');
+    makeSortable('driverIncidentsTable');
+  });
+  mo.observe(document.documentElement, {childList:true, subtree:true});
+})();
+</script>
+
+</body>
+</html>

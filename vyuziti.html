@@ -1,0 +1,2238 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Analýza aktivit strojů • Machine Activity Analyzer</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+  <!-- Matrix/heatmap plugin for Chart.js -->
+  <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.3.0/dist/chartjs-chart-matrix.min.js"></script>
+  <style>
+    .dropzone { border: 2px dashed #cbd5e1; }
+    .dropzone.dragover { border-color: #6366f1; background-color: #f5f3ff; }
+    th, td { white-space: nowrap; }
+    .table-wrap { overflow: auto; }
+    .chart-box { position: relative; height: 280px; }
+    .chart-box canvas { width: 100% !important; height: 100% !important; }
+.table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f1f5f9;
+}
+
+  
+/* Sticky hlavičky pro Souhrnnou tabulku */
+#table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: #f1f5f9;
+}
+
+
+/* Sticky header enhancements for Summary table */
+#summaryTableWrap thead th,
+#table thead th {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  background: #f1f5f9;
+}
+
+</style>
+</head>
+<body class="bg-slate-50 text-slate-900">
+  <div class="max-w-7xl mx-auto p-4">
+    <header class="flex items-center justify-between gap-4 mb-4">
+      <h1 class="text-2xl font-bold">Analýza aktivit strojů <span class="text-slate-400">/ Machine Activity Analyzer</span></h1>
+      <div class="flex items-center gap-2">
+        <label class="text-sm text-slate-600">Jazyk / Language</label>
+        <select id="lang" class="border rounded-md px-2 py-1 text-sm">
+          <option value="cs">Čeština</option>
+          <option value="en">English</option>
+        </select>
+        <button id="downloadReportBtn" class="hidden ml-2 rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-500">Exportovat CSV</button>
+      </div>
+    </header>
+
+    <section class="grid md:grid-cols-3 gap-4 mb-6">
+      <div id="uploader" class="dropzone rounded-2xl bg-white p-6 shadow">
+        <h2 class="font-semibold mb-2" data-i18n="upload_title">Nahrajte report (.xlsx)</h2>
+        <p class="text-sm text-slate-600 mb-3" data-i18n="upload_hint">Přetáhněte soubor MachineActivityReport.xlsx nebo ho vyberte.</p>
+        <input id="file" type="file" accept=".xlsx,.xls,.csv" class="block w-full text-sm" />
+        <div class="text-xs text-slate-500 mt-2" data-i18n="upload_note">Automaticky rozpozná hlavičku (řádek s názvy sloupců).</div>
+      </div>
+
+      <div class="rounded-2xl bg-white p-6 shadow">
+        <h2 class="font-semibold mb-2" data-i18n="filters">Filtry</h2>
+        <div class="grid grid-cols-2 gap-3 text-sm">
+          <div>
+            <label class="block text-slate-600 mb-1" data-i18n="date_from">Datum od</label>
+            <input id="dateFrom" type="date" class="w-full border rounded px-2 py-1" />
+          </div>
+          <div>
+            <label class="block text-slate-600 mb-1" data-i18n="date_to">Datum do</label>
+            <input id="dateTo" type="date" class="w-full border rounded px-2 py-1" />
+          </div>
+          <div class="col-span-2">
+            <label class="block text-slate-600 mb-1" data-i18n="group_by">Seskupit podle</label>
+            <select id="groupBy" class="w-full border rounded px-2 py-1">
+              <option value="Flotilní označení">Flotilní označení</option>
+              <option value="Stroj">Stroj</option>
+              <option value="Model">Model</option>
+              <option value="Rodina stroje">Rodina stroje</option>
+              <option value="Řidič">Řidič</option>
+              <option value="Provoz">Provoz</option>
+            </select>
+          </div>
+
+          <!-- Warehouse / Provoz filter -->
+          <div class="col-span-2">
+            <label class="block text-slate-600 mb-1" data-i18n="warehouse_label">Sklad / Provoz</label>
+            <select id="warehouseSelect" class="w-full border rounded px-2 py-1">
+              <option value="all" data-i18n="warehouse_all">Všechny</option>
+            </select>
+          </div>
+
+          <div class="col-span-2">
+            <label class="block text-slate-600 mb-1" data-i18n="shift">Směna</label>
+            <div class="flex flex-wrap gap-2 items-center">
+              <select id="shiftSelect" class="border rounded px-2 py-1">
+                <option value="all" data-i18n="shift_all_day">Celý den</option>
+                <option value="m1" data-i18n="shift_m1">06–14</option>
+                <option value="m2" data-i18n="shift_m2">14–22</option>
+                <option value="m3" data-i18n="shift_m3">22–06</option>
+                <option value="custom" data-i18n="shift_custom">Vlastní okno</option>
+              </select>
+              <div id="customShiftWrap" class="hidden flex items-center gap-2">
+                <input id="shiftFrom" type="time" value="06:00" class="border rounded px-2 py-1 text-sm">
+                <span>–</span>
+                <input id="shiftTo" type="time" value="14:00" class="border rounded px-2 py-1 text-sm">
+              </div>
+            </div>
+          </div>
+
+          <div class="col-span-2">
+            <label class="block text-slate-600 mb-1" data-i18n="target">Cíl využití (%)</label>
+            <input id="targetInput" type="number" min="0" max="100" step="1" value="65" class="w-32 border rounded px-2 py-1" />
+          </div>
+          <!-- Minimum utilization threshold -->
+          <div class="col-span-2">
+            <label class="block text-slate-600 mb-1">Minimální využití (%)</label>
+            <input id="minTargetInput" type="number" min="0" max="100" step="1" value="50" class="w-32 border rounded px-2 py-1" />
+          </div>
+
+          <div class="col-span-2 flex items-center justify-between">
+            <div class="flex items-center gap-2">
+              <input type="checkbox" id="topOnly" class="accent-indigo-600" />
+              <label for="topOnly" data-i18n="top10">Zobrazit TOP 10 dle využití</label>
+            </div>
+            <button id="applyBtn" class="rounded-lg bg-indigo-600 text-white px-3 py-2 text-sm font-medium hover:bg-indigo-500" data-i18n="apply">Použít</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="rounded-2xl bg-white p-6 shadow">
+        <h2 class="font-semibold mb-2" data-i18n="legend_title">Legenda / Sloupce</h2>
+        <ul class="list-disc pl-5 text-sm leading-6">
+          <li><b>Čas klíče</b> – celkový čas se zapnutým klíčkem (h)</li>
+          <li><b>Provozní doba</b> – aktivní práce stroje (h)</li>
+          <li><b>Využití</b> – Provozní doba / Čas klíče</li>
+          <li><b>Jízda</b>, <b>Zdvih</b>, <b>Se zátěží</b>, <b>Volnoběh</b> – hodinový rozklad</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Comparison of periods section -->
+    <section class="rounded-2xl bg-white p-6 shadow mb-10">
+      <h2 class="font-semibold" id="compareTitle" data-i18n="compare_title">Porovnání období</h2>
+      <!-- Comparison type selector -->
+      <div class="flex items-center gap-2 mt-3 mb-4">
+        <label for="compareType" class="text-sm" data-i18n="compare_type">Typ porovnání</label>
+        <select id="compareType" class="border rounded px-2 py-1 text-sm">
+          <option value="weeks" data-i18n="compare_type_weeks">Týdny</option>
+          <option value="dates" data-i18n="compare_type_dates">Data</option>
+        </select>
+      </div>
+      <!-- Week selectors -->
+      <div id="weekSelectors" class="flex items-center gap-2 mb-4">
+        <label for="week1Select" class="text-sm" data-i18n="week1_label">První týden</label>
+        <select id="week1Select" class="border rounded px-2 py-1 text-sm"></select>
+        <label for="week2Select" class="text-sm" data-i18n="week2_label">Druhý týden</label>
+        <select id="week2Select" class="border rounded px-2 py-1 text-sm"></select>
+      </div>
+      <!-- Date selectors -->
+      <div id="dateSelectors" class="flex items-center gap-2 mb-4 hidden">
+        <label for="date1Select" class="text-sm" data-i18n="date1_label">První datum</label>
+        <input id="date1Select" type="date" class="border rounded px-2 py-1 text-sm" />
+        <label for="date2Select" class="text-sm" data-i18n="date2_label">Druhé datum</label>
+        <input id="date2Select" type="date" class="border rounded px-2 py-1 text-sm" />
+      </div>
+      <div id="comparisonResult" class="text-sm"></div>
+    </section>
+
+    <!-- Driver details section (collapsible, scrollable) -->
+    <section class="rounded-2xl bg-white p-6 shadow mb-10">
+      <details id="driversSection">
+        <summary class="font-semibold cursor-pointer" id="driversTitle" data-i18n="drivers_title">Detaily řidičů</summary>
+        <div class="mt-3 table-wrap max-h-60 overflow-y-auto">
+          <table id="driversTable" class="min-w-full text-sm">
+            <thead id="driversHead" class="bg-slate-100"></thead>
+            <tbody id="driversBody"></tbody>
+          </table>
+        </div>
+        <!-- Help/legend for driver table -->
+        <div id="driversHelp" class="mt-2 text-xs text-slate-500"></div>
+      </details>
+    </section>
+
+    <section id="summary" class="grid md:grid-cols-5 gap-4 mb-6"></section>
+
+    <section class="grid lg:grid-cols-2 gap-4 mb-6">
+      <div class="rounded-2xl bg-white p-6 shadow">
+        <h2 class="font-semibold mb-4" data-i18n="chart_util">Využití podle skupiny</h2>
+        <div class="chart-box"><canvas id="utilChart"></canvas></div>
+      </div>
+      <div class="rounded-2xl bg-white p-6 shadow">
+        <h2 class="font-semibold mb-4" data-i18n="chart_stack">Rozklad času (h)</h2>
+        <div class="chart-box"><canvas id="stackChart"></canvas></div>
+      </div>
+    </section>
+
+    <!-- Hourly heatmap section -->
+    <section class="rounded-2xl bg-white p-6 shadow mb-6">
+      <h2 class="font-semibold mb-4" data-i18n="heatmap_title">Hodinová heatmapa</h2>
+      <div class="chart-box"><canvas id="heatmapChart"></canvas></div>
+    </section>
+
+    <!-- Peak hours section -->
+    <section class="rounded-2xl bg-white p-6 shadow mb-6">
+      <h2 class="font-semibold mb-4" data-i18n="peak_title">Špičky využití</h2>
+      <!-- Two columns: top and bottom hourly utilization -->
+      <div class="grid grid-cols-2 gap-4 text-sm">
+        <div>
+          <div class="font-medium mb-2" data-i18n="peak_top_title">Top 5 hodin</div>
+          <ul id="peakList" class="list-disc pl-5 leading-5 space-y-1"></ul>
+        </div>
+        <div>
+          <div class="font-medium mb-2" data-i18n="peak_bottom_title">Bottom 5 hodin</div>
+          <ul id="lowList" class="list-disc pl-5 leading-5 space-y-1"></ul>
+        </div>
+      </div>
+    </section>
+
+    <!-- Daily extremes section (best and worst hour per day) -->
+    <section class="rounded-2xl bg-white p-6 shadow mb-6">
+      <h2 class="font-semibold mb-4" data-i18n="daily_extremes_title">Denní maxima a minima</h2>
+      <div class="overflow-auto">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="text-left px-3 py-2" data-i18n="day_col">Den</th>
+              <th class="text-left px-3 py-2" data-i18n="best_col">Nejvyšší</th>
+              <th class="text-left px-3 py-2" data-i18n="worst_col">Nejnižší</th>
+            </tr>
+          </thead>
+          <tbody id="dailyExtremesBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="grid lg:grid-cols-2 gap-4 mb-6">
+      <div class="rounded-2xl bg-white p-6 shadow">
+        <h2 class="font-semibold mb-4" id="trendTitle">Denní trend využití</h2>
+        <div class="chart-box"><canvas id="trendChart"></canvas></div>
+      </div>
+      <div class="rounded-2xl bg-white p-6 shadow">
+        <h2 class="font-semibold mb-4" id="leadersTitle">Lídři a propadáci</h2>
+        <div class="grid grid-cols-2 gap-4 text-sm">
+          <div>
+            <div class="font-medium mb-2" id="top5Title">TOP 5 dle využití</div>
+            <ul id="leadersTop" class="space-y-1"></ul>
+          </div>
+          <div>
+            <div class="font-medium mb-2" id="bottom5Title">BOTTOM 5 dle využití</div>
+            <ul id="leadersBottom" class="space-y-1"></ul>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Souhrnná tabulka -->
+    <section class="rounded-2xl bg-white p-6 shadow mb-10">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold" data-i18n="table_title">Souhrnná tabulka</h2>
+        <div class="flex items-center gap-2">
+          <button id="exportCsvBtn" class="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50" data-i18n="export_csv">Exportovat CSV</button>
+          <button id="printBtn" class="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50">Tisk / PDF</button>
+        </div>
+      </div>
+      <div class="table-wrap max-h-[60vh] overflow-y-auto" id="summaryTableWrap">
+        <table id="table" class="min-w-full text-sm">
+          <thead class="bg-slate-100"></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section class="rounded-2xl bg-white p-6 shadow mb-10">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold" id="weeklyTitle">Týdenní přehled (ISO týdny)</h2>
+        <button id="exportWeeksBtn" class="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50">Export týdnů CSV</button>
+      </div>
+      <div class="grid lg:grid-cols-2 gap-4">
+        <div class="chart-box"><canvas id="weeklyChart"></canvas></div>
+        <div class="table-wrap">
+          <table class="min-w-full text-sm">
+            <thead class="bg-slate-100">
+              <tr>
+                <th class="text-left px-3 py-2">ISO týden</th>
+                <th class="text-left px-3 py-2">Sezení</th>
+                <th class="text-left px-3 py-2">Klíč (h)</th>
+                <th class="text-left px-3 py-2">Provoz (h)</th>
+                <th class="text-left px-3 py-2">Využití</th>
+              </tr>
+            </thead>
+            <tbody id="weeksTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="rounded-2xl bg-white p-6 shadow mb-10">
+      <div class="flex items-center justify-between mb-3">
+        <h2 class="font-semibold" id="anomTitle">Kontroly a anomálie</h2>
+        <button id="exportAnomBtn" class="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50">Exportovat anomálie CSV</button>
+      </div>
+      <div class="text-sm text-slate-600 mb-3" id="anomalySummary">
+        <span id="anomalyCount">0</span> záznamů s potenciálním problémem (provozní > klíč, nulový/negativní čas, obrácené datum).
+      </div>
+      <div class="table-wrap">
+        <table class="min-w-full text-sm">
+          <thead class="bg-slate-100">
+            <tr>
+              <th class="text-left px-3 py-2">Stroj</th>
+              <th class="text-left px-3 py-2">Flotilní</th>
+              <th class="text-left px-3 py-2">Start</th>
+              <th class="text-left px-3 py-2">Konec</th>
+              <th class="text-left px-3 py-2">Klíč (h)</th>
+              <th class="text-left px-3 py-2">Provoz (h)</th>
+              <th class="text-left px-3 py-2">Typ</th>
+            </tr>
+          </thead>
+          <tbody id="anomalyTableBody"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <footer class="text-xs text-slate-500 mb-6">
+      <p>Tip: Data musí obsahovat sloupce <i>Stroj, Flotilní označení, Model, Zapnutí stroje, Vypnutí stroje, Čas klíče (s), Provozní doba (s), Čas jízdy (s), Čas zdvihu (s), Čas se zátěží (s)</i>. Hlavička se hledá automaticky (první řádek, který obsahuje „Stroj“).</p>
+    </footer>
+  </div>
+
+<script>
+// --- i18n dictionary ---
+const I18N = {
+  cs: {
+    upload_title: "Nahrajte report (.xlsx)",
+    upload_hint: "Přetáhněte soubor MachineActivityReport.xlsx nebo ho vyberte.",
+    upload_note: "Automaticky rozpozná hlavičku (řádek s názvy sloupců).",
+    filters: "Filtry",
+    date_from: "Datum od",
+    date_to: "Datum do",
+    group_by: "Seskupit podle",
+    shift: "Směna",
+    shift_all_day: "Celý den",
+    shift_m1: "06–14",
+    shift_m2: "14–22",
+    shift_m3: "22–06",
+    shift_custom: "Vlastní okno",
+    target: "Cíl využití (%)",
+    top10: "Zobrazit TOP 10 dle využití",
+    apply: "Použít",
+    legend_title: "Legenda / Sloupce",
+    chart_util: "Využití podle skupiny",
+    chart_stack: "Rozklad času (h)",
+    table_title: "Souhrnná tabulka",
+    export_csv: "Exportovat CSV",
+    vs_target: "vs cíl",
+    weekly_title: "Týdenní přehled (ISO týdny)",
+    weekly_export: "Export týdnů CSV",
+    heatmap_title: "Hodinová heatmapa",
+    warehouse_label: "Sklad / Provoz",
+    warehouse_all: "Všechny",
+    peak_title: "Špičky využití",
+    peak_top_title: "Top 5 hodin",
+    peak_bottom_title: "Bottom 5 hodin",
+    daily_extremes_title: "Denní maxima a minima",
+    day_col: "Den",
+    best_col: "Nejvyšší",
+    worst_col: "Nejnižší",
+    cards: ["Stroje", "Sezení", "Čas klíče (h)", "Provozní doba (h)", "Využití"]
+    ,
+    week_compare_title: "Porovnání dvou týdnů",
+    week_compare_insufficient: "Nedostatek dat pro porovnání.",
+    week1_label: "Předchozí týden",
+    week2_label: "Poslední týden",
+    change_label: "Změna",
+    drivers_title: "Detaily řidičů"
+    , drivers_help: "Řidič – jméno řidiče.\nSezení – počet zaznamenaných relací.\nKlíč (h) – celkový čas se zapnutým klíčem (h).\nProvoz (h) – aktivní práce stroje (h).\nVyužití – poměr Provoz / Klíč v %."
+    , compare_title: "Porovnání období"
+    , compare_type: "Porovnání podle"
+    , compare_type_weeks: "Týdny"
+    , compare_type_dates: "Data"
+    , date1_label: "První datum"
+    , date2_label: "Druhé datum"
+    , compare_insufficient: "Nedostatek dat pro porovnání."
+    , week1_label: "První týden"
+    , week2_label: "Druhý týden"
+  },
+  en: {
+    upload_title: "Upload report (.xlsx)",
+    upload_hint: "Drag & drop MachineActivityReport.xlsx or pick it.",
+    upload_note: "Header row is detected automatically (first row containing 'Stroj').",
+    filters: "Filters",
+    date_from: "Date from",
+    date_to: "Date to",
+    group_by: "Group by",
+    shift: "Shift",
+    shift_all_day: "All day",
+    shift_m1: "06–14",
+    shift_m2: "14–22",
+    shift_m3: "22–06",
+    shift_custom: "Custom window",
+    target: "Target utilization (%)",
+    top10: "Show TOP 10 by utilization",
+    apply: "Apply",
+    legend_title: "Legend / Columns",
+    chart_util: "Utilization by group",
+    chart_stack: "Time breakdown (h)",
+    table_title: "Summary table",
+    export_csv: "Export CSV",
+    vs_target: "vs target",
+    weekly_title: "Weekly overview (ISO weeks)",
+    weekly_export: "Export weeks CSV",
+    heatmap_title: "Hourly heatmap",
+    warehouse_label: "Warehouse / Operation",
+    warehouse_all: "All",
+    peak_title: "Peak utilization",
+    peak_top_title: "Top 5 hours",
+    peak_bottom_title: "Bottom 5 hours",
+    daily_extremes_title: "Daily peaks & lows",
+    day_col: "Day",
+    best_col: "Highest",
+    worst_col: "Lowest",
+    cards: ["Machines", "Sessions", "Key time (h)", "Operating (h)", "Utilization"]
+    ,
+    week_compare_title: "Comparison of two weeks",
+    week_compare_insufficient: "Not enough data for comparison.",
+    week1_label: "Previous week",
+    week2_label: "Last week",
+    change_label: "Change",
+    drivers_title: "Driver details"
+    , drivers_help: "Driver – operator name.\nSessions – number of sessions.\nKey (h) – total key time in hours.\nOperating (h) – total operating time in hours.\nUtilization – operating time divided by key time, in %."
+    , compare_title: "Comparison of periods"
+    , compare_type: "Compare by"
+    , compare_type_weeks: "Weeks"
+    , compare_type_dates: "Dates"
+    , date1_label: "First date"
+    , date2_label: "Second date"
+    , compare_insufficient: "Not enough data for comparison."
+    , week1_label: "First week"
+    , week2_label: "Second week"
+  }
+};
+
+const state = {
+  lang: "cs",
+  rows: [],
+  filtered: [],
+  grouped: [],
+  trendDaily: [],
+  weekly: [],
+  groupBy: "Flotilní označení",
+  topOnly: false,
+  shiftMode: "all",
+  shiftFrom: "06:00",
+  shiftTo: "14:00",
+  target: 0.65,
+  // Minimum utilization threshold (e.g. 0.50 for 50%). Values below this will be shown in red.
+  minTarget: 0.50,
+  // Sorting state: index of sorted column (null means no sort) and direction (true=asc, false=desc)
+  sortColumn: null,
+  sortAsc: true,
+  charts: { util: null, stack: null, trend: null, weekly: null, heatmap: null },
+  heatmap: []
+  , selectedWarehouse: 'all'
+  , peaks: []
+  , lows: []
+  , dailyPeaks: []
+  , dailyLows: []
+  , weekComparison: null
+  , drivers: []
+  , compareType: 'weeks'
+  , week1: null
+  , week2: null
+  , date1: null
+  , date2: null
+  , periodComparison: null
+};
+
+const REQUIRED = [
+  "Stroj","Flotilní označení","Model","Zapnutí stroje","Vypnutí stroje",
+  "Čas klíče (s)","Provozní doba (s)","Čas jízdy (s)","Čas zdvihu (s)","Čas se zátěží (s)"
+];
+
+const ALIASES = {
+  "Cas klice (s)":"Čas klíče (s)",
+  "Provozni doba (s)":"Provozní doba (s)",
+  "Cas jizdy (s)":"Čas jízdy (s)",
+  "Cas zdvihu (s)":"Čas zdvihu (s)",
+  "Cas se zatezi (s)":"Čas se zátěží (s)",
+  "Ridic":"Řidič",
+  "Provozni pomer":"Provozní poměr"
+};
+
+function t(key){ return I18N[state.lang][key] || key; }
+
+function setLang(lang){
+  state.lang = lang;
+  document.querySelectorAll("[data-i18n]").forEach(el => {
+    const key = el.getAttribute("data-i18n");
+    const txt = t(key);
+    if(txt) el.textContent = txt;
+  });
+  const L = state.lang==='cs';
+  const byId = (id, txt) => { const el = document.getElementById(id); if(el) el.textContent = txt; };
+  byId('trendTitle', L?'Denní trend využití':'Daily utilization trend');
+  byId('leadersTitle', L?'Lídři a propadáci':'Leaders & laggards');
+  byId('top5Title', L?'TOP 5 dle využití':'Top 5 by utilization');
+  byId('bottom5Title', L?'BOTTOM 5 dle využití':'Bottom 5 by utilization');
+  byId('anomTitle', L?'Kontroly a anomálie':'Checks & anomalies');
+  byId('weeklyTitle', t('weekly_title'));
+  const exportWeeks = document.getElementById('exportWeeksBtn');
+  if(exportWeeks) exportWeeks.textContent = t('weekly_export');
+  const exportBtn = document.getElementById('exportAnomBtn');
+  if(exportBtn) exportBtn.textContent = L?'Exportovat anomálie CSV':'Export anomalies CSV';
+  const downloadReportBtn = document.getElementById('downloadReportBtn');
+  if(downloadReportBtn) downloadReportBtn.textContent = t('export_csv');
+
+  // Update warehouse select default option label
+  const wsSel = document.getElementById('warehouseSelect');
+  if(wsSel){
+    const optAll = wsSel.querySelector('option[value="all"]');
+    if(optAll) optAll.textContent = t('warehouse_all');
+  }
+  renderSummary();
+  // Re-render peaks list with correct language
+  renderPeaks();
+  // Re-render daily extremes with correct language
+  renderDailyExtremes();
+  // Re-render week comparison and drivers with correct language
+  renderComparison();
+  renderDrivers();
+
+}
+
+document.getElementById("lang").addEventListener("change", e => {
+  setLang(e.target.value);
+});
+
+// --- File handling ---
+const dz = document.getElementById("uploader");
+const fileInput = document.getElementById("file");
+
+["dragover","dragenter"].forEach(evt => dz.addEventListener(evt, e => {
+  e.preventDefault(); dz.classList.add("dragover");
+}));
+["dragleave","drop"].forEach(evt => dz.addEventListener(evt, e => {
+  e.preventDefault(); dz.classList.remove("dragover");
+}));
+dz.addEventListener("drop", e => {
+  const f = e.dataTransfer.files?.[0];
+  if(f) readFile(f);
+});
+fileInput.addEventListener("change", e => {
+  const f = e.target.files?.[0];
+  if(f) readFile(f);
+});
+
+function normalizeHeader(h){
+  if(!h) return "";
+  let key = String(h).trim();
+  if(ALIASES[key]) return ALIASES[key];
+  const noDiacritics = key.normalize("NFD").replace(/\p{Diacritic}/gu, "");
+  if(ALIASES[noDiacritics]) return ALIASES[noDiacritics];
+  return key;
+}
+
+function parseDate(v){
+  if(v instanceof Date) return v;
+  if(typeof v === "number"){
+    const dt = XLSX.SSF.parse_date_code(v);
+    return new Date(Date.UTC(dt.y, dt.m-1, dt.d, dt.H||0, dt.M||0, dt.S||0));
+  }
+  if(typeof v === "string"){
+    const m = v.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})\s+(\d{1,2}):(\d{2})(?::(\d{2}))?$/);
+    if(m){
+      const [_, d, mo, y, h, mi, s] = m;
+      return new Date(Number(y), Number(mo)-1, Number(d), Number(h), Number(mi), Number(s||0));
+    }
+    const d = new Date(v);
+    if(!isNaN(d)) return d;
+  }
+  return null;
+}
+
+function num(v){
+  if(v==null || v==="") return 0;
+  if(typeof v === "number") return v;
+  if(typeof v === "string") return Number(v.replace(",", ".")) || 0;
+  return 0;
+}
+
+function detectHeaderRow(sheet){
+  const range = XLSX.utils.decode_range(sheet["!ref"]);
+  for(let r = range.s.r; r <= Math.min(range.s.r+20, range.e.r); r++){
+    let rowTexts = [];
+    for(let c = range.s.c; c <= range.e.c; c++){
+      const cell = sheet[XLSX.utils.encode_cell({r, c})];
+      rowTexts.push(cell ? String(cell.w || cell.v || "").trim() : "");
+    }
+    if(rowTexts.some(x => x.toLowerCase() === "stroj")) return r;
+  }
+  return range.s.r;
+}
+
+function readFile(file){
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    const data = new Uint8Array(e.target.result);
+    const wb = XLSX.read(data, { type: "array" });
+    const sheetName = wb.SheetNames.includes("Report") ? "Report" : wb.SheetNames[0];
+    const ws = wb.Sheets[sheetName];
+    const headerRowIdx = detectHeaderRow(ws);
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, range: headerRowIdx });
+    const header = rows.shift().map(normalizeHeader);
+
+    const idx = {}; header.forEach((h,i) => { idx[h]=i; });
+
+    const items = rows
+      .filter(r => r && r.length > 0)
+      .map(r => {
+        const get = (h) => r[idx[h]];
+        const zap = parseDate(get("Zapnutí stroje"));
+        const vyp = parseDate(get("Vypnutí stroje"));
+        return {
+          Stroj: get("Stroj"),
+          "Flotilní označení": get("Flotilní označení") || "",
+          "č. flotily TMH": get("č. flotily TMH") || "",
+          "Rodina stroje": get("Rodina stroje") || "",
+          Model: get("Model") || "",
+          Značka: get("Značka") || "",
+          Provoz: get("Provoz") || "",
+          "Zapnutí stroje": zap,
+          "Vypnutí stroje": vyp,
+          "Řidič": get("Řidič") || "",
+          "Čas klíče (s)": num(get("Čas klíče (s)")),
+          "Provozní doba (s)": num(get("Provozní doba (s)")),
+          "Čas jízdy (s)": num(get("Čas jízdy (s)")),
+          "Čas zdvihu (s)": num(get("Čas zdvihu (s)")),
+          "Provozní poměr": num(get("Provozní poměr")),
+          "Metoda odhlášení": get("Metoda odhlášení") || "",
+          "Čas se zátěží (s)": num(get("Čas se zátěží (s)"))
+        };
+      })
+      .filter(x => x["Zapnutí stroje"] && x["Vypnutí stroje"]);
+
+    state.rows = items;
+    // Populate warehouse/provoz filter options
+    state.selectedWarehouse = 'all';
+    const wsSel = document.getElementById('warehouseSelect');
+    if(wsSel){
+      const uniq = Array.from(new Set(items.map(i => (i["Provoz"] || "").trim()).filter(x => x))).sort();
+      // Build options: first 'all'
+      let opts = `<option value="all">${t('warehouse_all')}</option>`;
+      opts += uniq.map(v => `<option value="${v}">${v}</option>`).join('');
+      wsSel.innerHTML = opts;
+    }
+    document.getElementById("downloadReportBtn").classList.remove("hidden");
+    applyFilters();
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+// --- Filters & grouping ---
+document.getElementById("applyBtn").addEventListener("click", () => applyFilters());
+document.getElementById("groupBy").addEventListener("change", e => { state.groupBy = e.target.value; });
+document.getElementById("topOnly").addEventListener("change", e => { state.topOnly = e.target.checked; });
+
+// Comparison type change
+const compareTypeSel = document.getElementById('compareType');
+if(compareTypeSel){
+  compareTypeSel.addEventListener('change', e => {
+    state.compareType = e.target.value;
+    // Show/hide selectors
+    const ws = document.getElementById('weekSelectors');
+    const ds = document.getElementById('dateSelectors');
+    if(ws && ds){
+      if(state.compareType === 'weeks'){
+        ws.classList.remove('hidden');
+        ds.classList.add('hidden');
+      } else {
+        ws.classList.add('hidden');
+        ds.classList.remove('hidden');
+      }
+    }
+    computeComparison();
+    renderComparison();
+  });
+}
+// Week selectors change
+const w1Sel = document.getElementById('week1Select');
+const w2Sel = document.getElementById('week2Select');
+if(w1Sel){
+  w1Sel.addEventListener('change', e => {
+    state.week1 = e.target.value;
+    computeComparison();
+    renderComparison();
+  });
+}
+if(w2Sel){
+  w2Sel.addEventListener('change', e => {
+    state.week2 = e.target.value;
+    computeComparison();
+    renderComparison();
+  });
+}
+// Date selectors change
+const d1Sel = document.getElementById('date1Select');
+const d2Sel = document.getElementById('date2Select');
+if(d1Sel){
+  d1Sel.addEventListener('change', e => {
+    state.date1 = e.target.value;
+    computeComparison();
+    renderComparison();
+  });
+}
+if(d2Sel){
+  d2Sel.addEventListener('change', e => {
+    state.date2 = e.target.value;
+    computeComparison();
+    renderComparison();
+  });
+}
+
+// Warehouse filter change
+const wsSelect = document.getElementById('warehouseSelect');
+if(wsSelect){
+  wsSelect.addEventListener('change', e => {
+    state.selectedWarehouse = e.target.value;
+    applyFilters();
+  });
+}
+
+const shiftSel = document.getElementById('shiftSelect');
+const customWrap = document.getElementById('customShiftWrap');
+const shiftFrom = document.getElementById('shiftFrom');
+const shiftTo = document.getElementById('shiftTo');
+if(shiftSel){
+  shiftSel.addEventListener('change', e => {
+    state.shiftMode = e.target.value;
+    if(customWrap) customWrap.classList.toggle('hidden', state.shiftMode !== 'custom');
+  });
+}
+if(shiftFrom){ shiftFrom.addEventListener('change', e => { state.shiftFrom = e.target.value || '00:00'; }); }
+if(shiftTo){ shiftTo.addEventListener('change', e => { state.shiftTo = e.target.value || '00:00'; }); }
+
+const targetInput = document.getElementById('targetInput');
+if(targetInput){
+  // Load saved target percentage from localStorage if available
+  const storedTarget = localStorage.getItem('targetUtil');
+  if(storedTarget !== null){
+    const tVal = Number(storedTarget);
+    if(!isNaN(tVal)){
+      targetInput.value = tVal;
+      state.target = tVal / 100;
+    }
+  }
+  targetInput.addEventListener('change', e => {
+    const v = Number(e.target.value);
+    if(!isNaN(v)){
+      const nv = Math.max(0, Math.min(100, v));
+      state.target = nv / 100;
+      // Persist the value as a whole number (percentage)
+      localStorage.setItem('targetUtil', nv.toString());
+    }
+  });
+}
+
+// Minimum utilization threshold input
+const minTargetInput = document.getElementById('minTargetInput');
+if(minTargetInput){
+  // Load saved minimum percentage from localStorage if available
+  const storedMin = localStorage.getItem('minTargetUtil');
+  if(storedMin !== null){
+    const mVal = Number(storedMin);
+    if(!isNaN(mVal)){
+      minTargetInput.value = mVal;
+      state.minTarget = mVal / 100;
+    }
+  }
+  minTargetInput.addEventListener('change', e => {
+    const v = Number(e.target.value);
+    if(!isNaN(v)){
+      const nv = Math.max(0, Math.min(100, v));
+      state.minTarget = nv / 100;
+      localStorage.setItem('minTargetUtil', nv.toString());
+    }
+  });
+}
+
+function parseHM(hm){
+  if(!hm) return 0; const m = hm.match(/^(\d{1,2}):(\d{2})$/); if(!m) return 0;
+  const h = Math.max(0, Math.min(23, parseInt(m[1],10)));
+  const mi = Math.max(0, Math.min(59, parseInt(m[2],10)));
+  return h*60 + mi;
+}
+function makeDateWithMinutes(base, minutes){
+  const d0 = new Date(base.getFullYear(), base.getMonth(), base.getDate(), 0, 0, 0, 0);
+  return new Date(d0.getTime() + minutes*60000);
+}
+function shiftWindowAt(baseDate, startMin, endMin){
+  const start = makeDateWithMinutes(baseDate, startMin);
+  const end = (endMin>startMin) ? makeDateWithMinutes(baseDate, endMin)
+                                : makeDateWithMinutes(new Date(baseDate.getFullYear(), baseDate.getMonth(), baseDate.getDate()+1), endMin);
+  return [start, end];
+}
+function overlaps(a1,a2,b1,b2){ return a1 < b2 && b1 < a2; }
+function intersectsShift(s,e,startMin,endMin){
+  if(!s || !e) return false;
+  const w1 = shiftWindowAt(s, startMin, endMin);
+  const w2 = shiftWindowAt(e, startMin, endMin);
+  const prev = new Date(s.getFullYear(), s.getMonth(), s.getDate()-1);
+  const w0 = shiftWindowAt(prev, startMin, endMin);
+  return overlaps(s,e,w0[0],w0[1]) || overlaps(s,e,w1[0],w1[1]) || overlaps(s,e,w2[0],w2[1]);
+}
+
+function secToHours(s){ return s / 3600; }
+function pct(n){ return (n*100).toFixed(1) + "%"; }
+function safeDiv(a,b){ return b>0 ? (a/b) : 0; }
+
+// ISO week calculation
+function isoWeekParts(date){
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const dayNr = (d.getUTCDay() + 6) % 7;
+  d.setUTCDate(d.getUTCDate() - dayNr + 3);
+  const firstThursday = new Date(Date.UTC(d.getUTCFullYear(),0,4));
+  const diff = d - firstThursday;
+  const week = 1 + Math.round(diff / 604800000);
+  const year = d.getUTCFullYear();
+  return {year, week};
+}
+function isoWeekKey(date){
+  const p = isoWeekParts(date);
+  return p.year + "-W" + String(p.week).padStart(2,'0');
+}
+
+function applyFilters(){
+  if(!state.rows.length){ alert(state.lang==='cs' ? 'Nejprve nahrajte soubor.' : 'Please upload a file first.'); return; }
+  const df = document.getElementById("dateFrom").value;
+  const dt = document.getElementById("dateTo").value;
+  const from = df ? new Date(df + "T00:00:00") : null;
+  const to = dt ? new Date(dt + "T23:59:59") : null;
+
+  // Date range filter
+  state.filtered = state.rows.filter(x => {
+    const s = x["Zapnutí stroje"];
+    if(from && s < from) return false;
+    if(to && s > to) return false;
+    return true;
+  });
+  // Warehouse filter
+  if(state.selectedWarehouse && state.selectedWarehouse !== 'all'){
+    state.filtered = state.filtered.filter(x => {
+      const p = (x["Provoz"] || '').trim();
+      return p === state.selectedWarehouse;
+    });
+  }
+
+  // Shift filter
+  if(state.shiftMode !== 'all'){
+    let startMin=0, endMin=24*60;
+    if(state.shiftMode==='m1'){ startMin=6*60; endMin=14*60; }
+    else if(state.shiftMode==='m2'){ startMin=14*60; endMin=22*60; }
+    else if(state.shiftMode==='m3'){ startMin=22*60; endMin=6*60; }
+    else if(state.shiftMode==='custom'){
+      startMin = parseHM(state.shiftFrom||'00:00');
+      endMin   = parseHM(state.shiftTo||'00:00');
+    }
+    state.filtered = state.filtered.filter(r => intersectsShift(r["Zapnutí stroje"], r["Vypnutí stroje"], startMin, endMin));
+  }
+
+  groupAndRender();
+}
+
+function groupAndRender(){
+  const gkey = state.groupBy;
+  const groups = new Map();
+  let minDate = null, maxDate = null;
+
+  for(const row of state.filtered){
+    const key = String(row[gkey] ?? "").trim() || "(neznámé)";
+    const o = groups.get(key) || {
+      key,
+      sessions:0,
+      machines: new Set(),
+      key_s:0,
+      op_s:0,
+      drive_s:0,
+      lift_s:0,
+      load_s:0,
+      idle_s:0,
+      model: undefined
+    };
+    o.sessions += 1;
+    o.machines.add(row["Stroj"]);
+    o.key_s += row["Čas klíče (s)"];
+    o.op_s += row["Provozní doba (s)"];
+    o.drive_s += row["Čas jízdy (s)"];
+    o.lift_s += row["Čas zdvihu (s)"];
+    o.load_s += row["Čas se zátěží (s)"];
+    // Capture the model value for this group. If the model is not yet set,
+    // prefer the first non-empty model encountered for the current group.
+    if(o.model === undefined && row["Model"]){
+      o.model = row["Model"];
+    }
+    groups.set(key, o);
+
+    const s = row["Zapnutí stroje"]; const e = row["Vypnutí stroje"];
+    if(s){ if(!minDate || s < minDate) minDate = s; if(!maxDate || s > maxDate) maxDate = s; }
+    if(e){ if(!minDate || e < minDate) minDate = e; if(!maxDate || e > maxDate) maxDate = e; }
+  }
+
+  let arr = Array.from(groups.values()).map(o => {
+    const idle = Math.max(0, o.key_s - o.op_s);
+    o.idle_s = idle;
+    const util = safeDiv(o.op_s, o.key_s);
+    return {
+      group: o.key,
+      machines: o.machines.size,
+      sessions: o.sessions,
+      key_h: secToHours(o.key_s),
+      op_h: secToHours(o.op_s),
+      util: util,
+      drive_h: secToHours(o.drive_s),
+      lift_h: secToHours(o.lift_s),
+      load_h: secToHours(o.load_s),
+      idle_h: secToHours(o.idle_s)
+      ,
+      // Preserve the model captured during grouping for display
+      model: o.model
+    };
+  });
+
+  arr.sort((a,b) => b.util - a.util);
+  if(state.topOnly){ arr = arr.slice(0, 10); }
+  state.grouped = arr;
+
+  // Daily trend
+  const daily = new Map();
+  for(const row of state.filtered){
+    const d = row["Zapnutí stroje"]; if(!d) continue;
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+    const o = daily.get(key) || { key, key_s:0, op_s:0 };
+    o.key_s += row["Čas klíče (s)"] || 0;
+    o.op_s += row["Provozní doba (s)"] || 0;
+    daily.set(key, o);
+  }
+  state.trendDaily = Array.from(daily.values()).sort((a,b)=>a.key.localeCompare(b.key)).map(o => ({
+    date: o.key,
+    util: safeDiv(o.op_s, o.key_s),
+    key_h: secToHours(o.key_s),
+    op_h: secToHours(o.op_s)
+  }));
+
+  // Weekly overview
+  const weekly = new Map();
+  for(const row of state.filtered){
+    const s = row["Zapnutí stroje"]; if(!s) continue;
+    const key = isoWeekKey(s);
+    const o = weekly.get(key) || { key, sessions:0, key_s:0, op_s:0 };
+    o.sessions += 1;
+    o.key_s += row["Čas klíče (s)"] || 0;
+    o.op_s += row["Provozní doba (s)"] || 0;
+    weekly.set(key, o);
+  }
+  state.weekly = Array.from(weekly.values()).sort((a,b)=> a.key.localeCompare(b.key)).map(o => ({
+    key: o.key,
+    sessions: o.sessions,
+    key_h: secToHours(o.key_s),
+    op_h: secToHours(o.op_s),
+    util: safeDiv(o.op_s, o.key_s)
+  }));
+
+  // Leaders
+  state.top5 = state.grouped.slice(0, Math.min(5, state.grouped.length));
+  state.bottom5 = state.grouped.slice(Math.max(0, state.grouped.length-5));
+
+  // Anomalies
+  state.anomalies = state.filtered.map(r => {
+    const issues = [];
+    const s = r["Zapnutí stroje"]; const e = r["Vypnutí stroje"];
+    const key_s = r["Čas klíče (s)"] || 0; const op_s = r["Provozní doba (s)"] || 0;
+    if(e && s && e < s) issues.push("END<START");
+    if(op_s > key_s + 1) issues.push("OP>KEY");
+    if(key_s <= 0 || op_s < 0) issues.push("NONPOS");
+    if(!issues.length) return null;
+    return {
+      Stroj: r["Stroj"],
+      Flotilni: r["Flotilní označení"] || "",
+      Start: s,
+      Konec: e,
+      Key_h: secToHours(key_s),
+      Op_h: secToHours(op_s),
+      Typ: issues.join(",")
+    };
+  }).filter(Boolean);
+
+  renderSummary(minDate, maxDate);
+  renderTable();
+  renderCharts();
+  renderTrend();
+  renderLeaders();
+  renderAnomalies();
+  renderWeekly();
+  // Compute and render hourly heatmap
+  computeHeatmap();
+  renderHeatmap();
+  renderPeaks();
+  renderDailyExtremes();
+  // Compute and render two-week comparison and driver summary
+  // Populate week selects for comparison
+  populateWeekSelects();
+  // Compute comparison (weeks or dates) and render
+  computeComparison();
+  renderComparison();
+  // Compute driver summary and render
+  computeDriverSummary();
+  renderDrivers();
+}
+
+// --- Render summary cards ---
+function renderSummary(minDate=null, maxDate=null){
+  const el = document.getElementById("summary");
+  if(!state.rows.length){ el.innerHTML = ""; return; }
+
+  const distinctMachines = new Set(state.filtered.map(r => r["Stroj"])) .size;
+  const sessions = state.filtered.length;
+  const key_s = state.filtered.reduce((a,b) => a + b["Čas klíče (s)"], 0);
+  const op_s = state.filtered.reduce((a,b) => a + b["Provozní doba (s)"], 0);
+  const util = safeDiv(op_s, key_s);
+
+  const cards = I18N[state.lang].cards;
+  const L = state.lang==='cs';
+  const delta = util*100 - state.target*100;
+  const deltaStr = (delta>=0?'+':'') + delta.toFixed(1) + (L ? ' p.b.' : ' pp');
+  const deltaClass = delta>=0 ? 'text-emerald-700' : 'text-rose-700';
+
+  const items = [
+    { label: cards[0], value: distinctMachines },
+    { label: cards[1], value: sessions },
+    { label: cards[2], value: secToHours(key_s).toFixed(1) },
+    { label: cards[3], value: secToHours(op_s).toFixed(1) },
+    { label: cards[4], value: (util*100).toFixed(1) + '%', extra: `<span class="${deltaClass}">${L?'vs cíl':'vs target'}: ${deltaStr}</span>` }
+  ];
+
+  el.innerHTML = items.map((x,i) => `
+    <div class="rounded-2xl bg-white p-5 shadow">
+      <div class="text-slate-500 text-xs">${minDate? (minDate.toLocaleDateString() + " – " + maxDate.toLocaleDateString()) : ""}</div>
+      <div class="text-2xl font-bold">${x.value}</div>
+      <div class="text-sm text-slate-600">${x.label}</div>
+      ${x.extra? `<div class="text-xs mt-1">${x.extra}</div>` : ''}
+    </div>
+  `).join("");
+}
+
+// --- Render table ---
+function renderTable(){
+  const thead = document.querySelector("#table thead");
+  const tbody = document.querySelector("#table tbody");
+  if(!thead || !tbody){ return; }
+  if(!state.grouped.length){ thead.innerHTML = ""; tbody.innerHTML=""; return; }
+
+  // If a sort column is defined, sort the grouped data before rendering.
+  if(state.sortColumn !== null){
+    const idx = state.sortColumn;
+    const asc = state.sortAsc;
+    state.grouped.sort((a,b) => {
+      let va, vb;
+      switch(idx){
+        case 0: va=a.group || ""; vb=b.group || ""; break;
+        case 1: va=a.model || ""; vb=b.model || ""; break;
+        case 2: va=a.machines; vb=b.machines; break;
+        case 3: va=a.sessions; vb=b.sessions; break;
+        case 4: va=a.key_h; vb=b.key_h; break;
+        case 5: va=a.op_h; vb=b.op_h; break;
+        case 6: va=a.util; vb=b.util; break;
+        case 7: va=a.drive_h; vb=b.drive_h; break;
+        case 8: va=a.lift_h; vb=b.lift_h; break;
+        case 9: va=a.load_h; vb=b.load_h; break;
+        case 10: va=a.idle_h; vb=b.idle_h; break;
+        default: va=0; vb=0;
+      }
+      if(typeof va === 'string'){ const cmp = va.localeCompare(vb); return asc ? cmp : -cmp; }
+      return asc ? (va - vb) : (vb - va);
+    });
+  }
+
+  const headers = [
+    state.groupBy,
+    "Model",
+    "Stroje",
+    "Sezení",
+    "Čas klíče (h)",
+    "Provozní (h)",
+    "Využití",
+    "Jízda (h)",
+    "Zdvih (h)",
+    "Se zátěží (h)",
+    "Volnoběh (h)"
+  ];
+  thead.innerHTML = "<tr>" + headers.map(h => `<th class="text-left px-3 py-2">${h}</th>`).join("") + "</tr>";
+  tbody.innerHTML = state.grouped.map(r => `
+    <tr class="border-t cursor-pointer">
+      <td class="px-3 py-2 font-medium">${r.group}</td>
+      <td class="px-3 py-2">${r.model ?? ""}</td>
+      <td class="px-3 py-2">${r.machines}</td>
+      <td class="px-3 py-2">${r.sessions}</td>
+      <td class="px-3 py-2">${r.key_h.toFixed(2)}</td>
+      <td class="px-3 py-2">${r.op_h.toFixed(2)}</td>
+      <td class="px-3 py-2"><span class="${r.util>=state.target ? 'text-emerald-700 font-semibold' : (r.util>=state.minTarget ? 'text-amber-600 font-semibold' : 'text-rose-700 font-semibold')}">${pct(r.util)}</span></td>
+      <td class="px-3 py-2">${r.drive_h.toFixed(2)}</td>
+      <td class="px-3 py-2">${r.lift_h.toFixed(2)}</td>
+      <td class="px-3 py-2">${r.load_h.toFixed(2)}</td>
+      <td class="px-3 py-2">${r.idle_h.toFixed(2)}</td>
+    </tr>
+  `).join("");
+
+  // Attach click handlers to header cells for sorting
+  const headerCells = thead.querySelectorAll('th');
+  headerCells.forEach((th, index) => {
+    th.classList.add('cursor-pointer');
+    th.addEventListener('click', () => {
+      if(state.sortColumn === index){
+        state.sortAsc = !state.sortAsc;
+      } else {
+        state.sortColumn = index;
+        state.sortAsc = true;
+      }
+      renderTable();
+    });
+  });
+  // Attach click handlers to each row to toggle details
+  Array.from(tbody.querySelectorAll('tr')).forEach(tr => {
+    tr.addEventListener('click', () => toggleRowDetails(tr));
+  });
+}
+
+// --- Charts ---
+function renderCharts(){
+  const labels = state.grouped.map(r => r.group);
+  const utilData = state.grouped.map(r => (r.util*100));
+
+  // Utilization chart
+  if(state.charts.util) state.charts.util.destroy();
+  state.charts.util = new Chart(document.getElementById("utilChart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: I18N[state.lang].chart_util,
+          data: utilData,
+          backgroundColor: utilData.map(v => v >= state.target*100 ? 'rgba(16,185,129,0.7)' : (v >= state.minTarget*100 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'))
+        },
+        {
+          type: 'line',
+          label: (state.lang==='cs'?'Cíl':'Target'),
+          data: labels.map(_ => state.target*100),
+          borderDash: [6,4],
+          pointRadius: 0,
+          borderWidth: 1.5
+        }
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, resizeDelay: 250, devicePixelRatio: 1,
+      scales: {
+        y: { beginAtZero: true, ticks: { callback: (v)=> v+"%" } }
+      },
+      plugins: {
+        tooltip: { callbacks: { label: ctx => ctx.raw.toFixed(1) + "%" } },
+        legend: {
+          position: "bottom",
+          // Enable toggling of individual datasets via legend clicks
+          onClick: (e, legendItem, legend) => {
+            const index = legendItem.datasetIndex;
+            const chart = legend.chart;
+            const meta = chart.getDatasetMeta(index);
+            // Toggle visibility: null means follow dataset.hidden; otherwise invert
+            meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+            chart.update();
+          }
+        }
+      }
+    }
+  });
+
+  // Stacked time breakdown
+  if(state.charts.stack) state.charts.stack.destroy();
+  state.charts.stack = new Chart(document.getElementById("stackChart"), {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        { label: "Provozní (h)", data: state.grouped.map(r => r.op_h), stack: "t" },
+        { label: "Volnoběh (h)", data: state.grouped.map(r => r.idle_h), stack: "t" },
+        { label: "Jízda (h)", data: state.grouped.map(r => r.drive_h), stack: "d" },
+        { label: "Zdvih (h)", data: state.grouped.map(r => r.lift_h), stack: "d" },
+        { label: "Se zátěží (h)", data: state.grouped.map(r => r.load_h), stack: "d" },
+      ]
+    },
+    options: { responsive: true, maintainAspectRatio: false, animation: false, resizeDelay: 250, devicePixelRatio: 1,
+      scales: { x: { stacked: true }, y: { stacked: true, beginAtZero: true } },
+      plugins: {
+        legend: {
+          position: "bottom",
+          onClick: (e, legendItem, legend) => {
+            const index = legendItem.datasetIndex;
+            const chart = legend.chart;
+            const meta = chart.getDatasetMeta(index);
+            meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+            chart.update();
+          }
+        }
+      }
+    }
+  });
+}
+
+// --- Trend chart ---
+function renderTrend(){
+  const el = document.getElementById('trendChart');
+  if(!el) return;
+  const labels = (state.trendDaily||[]).map(x=>x.date);
+  const data = (state.trendDaily||[]).map(x=>x.util*100);
+  if(state.charts.trend) state.charts.trend.destroy();
+  state.charts.trend = new Chart(el, {
+    type: 'line',
+    data: { labels, datasets: [
+      { label: state.lang==='cs'?'Využití (%)':'Utilization (%)', data },
+      { type:'line', label:(state.lang==='cs'?'Cíl':'Target'), data: labels.map(_=> state.target*100), borderDash:[6,4], pointRadius:0, borderWidth:1.5 }
+    ] },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      resizeDelay: 250,
+      devicePixelRatio: 1,
+      scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>v+'%' } } },
+      plugins:{
+        legend:{
+          position:'bottom',
+          // Allow toggling of datasets in the trend chart
+          onClick: (e, legendItem, legend) => {
+            const index = legendItem.datasetIndex;
+            const chart = legend.chart;
+            const meta = chart.getDatasetMeta(index);
+            meta.hidden = meta.hidden === null ? !chart.data.datasets[index].hidden : null;
+            chart.update();
+          }
+        }
+      }
+    }
+  });
+}
+
+// --- Leaders ---
+function renderLeaders(){
+  const topUL = document.getElementById('leadersTop');
+  const botUL = document.getElementById('leadersBottom');
+  if(!topUL || !botUL) return;
+  const li = (r)=>`<li class="flex items-center justify-between"><span class="truncate">${r.group}</span><span class="ml-2 tabular-nums">${(r.util*100).toFixed(1)}%</span></li>`;
+  topUL.innerHTML = (state.top5||[]).map(li).join('');
+  botUL.innerHTML = (state.bottom5||[]).map(li).join('');
+}
+
+// --- Anomalies ---
+function fmtDateTime(d){ if(!d) return ''; return new Date(d).toLocaleString(); }
+
+function renderAnomalies(){
+  const tbody = document.getElementById('anomalyTableBody');
+  const cntEl = document.getElementById('anomalyCount');
+  const sumEl = document.getElementById('anomalySummary');
+  if(!tbody || !cntEl) return;
+  const arr = state.anomalies || [];
+  cntEl.textContent = arr.length;
+  if(sumEl){ sumEl.firstChild && (sumEl.firstChild.textContent = arr.length + ' '); }
+  tbody.innerHTML = arr.map(a => `
+    <tr class="border-t"> 
+      <td class="px-3 py-2">${a.Stroj||''}</td>
+      <td class="px-3 py-2">${a.Flotilni||''}</td>
+      <td class="px-3 py-2">${fmtDateTime(a.Start)}</td>
+      <td class="px-3 py-2">${fmtDateTime(a.Konec)}</td>
+      <td class="px-3 py-2">${(a.Key_h||0).toFixed(2)}</td>
+      <td class="px-3 py-2">${(a.Op_h||0).toFixed(2)}</td>
+      <td class="px-3 py-2">${a.Typ}</td>
+    </tr>`).join('');
+}
+
+function toCsvAnomalies(rows){
+  if(!rows || !rows.length) return '';
+  const HEADERS = ['Stroj','Flotilní','Start','Konec','Klíč (h)','Provoz (h)','Typ'];
+  const csvRows = rows.map(a => [
+    a.Stroj||'', a.Flotilni||'', fmtDateTime(a.Start), fmtDateTime(a.Konec),
+    (a.Key_h||0).toFixed(2), (a.Op_h||0).toFixed(2), a.Typ
+  ].join(';'));
+  return [HEADERS.join(';')].concat(csvRows).join('\n');
+}
+
+// --- Weekly ---
+function renderWeekly(){
+  const labels = (state.weekly||[]).map(w => w.key);
+  const data = (state.weekly||[]).map(w => w.util*100);
+  const el = document.getElementById('weeklyChart');
+  if(!el) return;
+  if(state.charts.weekly) state.charts.weekly.destroy();
+  state.charts.weekly = new Chart(el, {
+    type: 'bar',
+    data: {
+      labels,
+      datasets: [
+        { label: state.lang==='cs'?'Využití (%)':'Utilization (%)', data,
+          backgroundColor: data.map(v => v >= state.target*100 ? 'rgba(16,185,129,0.7)' : 'rgba(239,68,68,0.7)') },
+        { type:'line', label:(state.lang==='cs'?'Cíl':'Target'),
+          data: labels.map(_=> state.target*100), borderDash:[6,4], pointRadius:0, borderWidth:1.5 }
+      ]
+    },
+    options: { responsive:true, maintainAspectRatio:false, animation:false, resizeDelay:250, devicePixelRatio:1,
+      scales:{ y:{ beginAtZero:true, ticks:{ callback:v=>v+'%' } } },
+      plugins:{ legend:{ position:'bottom' } }
+    }
+  });
+
+  // table
+  const tbody = document.getElementById('weeksTableBody');
+  if(!tbody) return;
+  tbody.innerHTML = (state.weekly||[]).map(w => `
+    <tr class="border-t">
+      <td class="px-3 py-2 font-medium">${w.key}</td>
+      <td class="px-3 py-2">${w.sessions}</td>
+      <td class="px-3 py-2">${w.key_h.toFixed(2)}</td>
+      <td class="px-3 py-2">${w.op_h.toFixed(2)}</td>
+      <td class="px-3 py-2"><span class="${w.util>=state.target?'text-emerald-700 font-semibold':'text-rose-700 font-semibold'}">${(w.util*100).toFixed(1)}%</span></td>
+    </tr>
+  `).join('');
+}
+
+// --- Render peak utilization hours ---
+function renderPeaks(){
+  const topUL = document.getElementById('peakList');
+  const lowUL = document.getElementById('lowList');
+  if(!topUL) return;
+  const shortCs = ['Po','Út','St','Čt','Pá','So','Ne'];
+  const shortEn = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  // Render top peaks
+  const peaks = state.peaks || [];
+  topUL.innerHTML = peaks.map(p => {
+    const day = state.lang === 'cs' ? shortCs[p.y] : shortEn[p.y];
+    const hourStart = String(p.x).padStart(2,'0');
+    const hourEnd = String((p.x + 1) % 24).padStart(2,'0');
+    return `<li><span class="font-medium">${day} ${hourStart}:00–${hourEnd}:00</span> – ${(p.v || 0).toFixed(1)}%</li>`;
+  }).join('');
+  // Render lowest utilization hours
+  if(lowUL){
+    const lows = state.lows || [];
+    lowUL.innerHTML = lows.map(p => {
+      const day = state.lang === 'cs' ? shortCs[p.y] : shortEn[p.y];
+      const hourStart = String(p.x).padStart(2,'0');
+      const hourEnd = String((p.x + 1) % 24).padStart(2,'0');
+      return `<li><span class="font-medium">${day} ${hourStart}:00–${hourEnd}:00</span> – ${(p.v || 0).toFixed(1)}%</li>`;
+    }).join('');
+  }
+}
+
+// --- Render daily extremes (best and worst hour per day) ---
+function renderDailyExtremes(){
+  const tbody = document.getElementById('dailyExtremesBody');
+  if(!tbody) return;
+  const shortCs = ['Po','Út','St','Čt','Pá','So','Ne'];
+  const shortEn = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const rows = [];
+  for(let day=0; day<7; day++){
+    const peak = (state.dailyPeaks || [])[day];
+    const low  = (state.dailyLows || [])[day];
+    if(!peak && !low) continue;
+    const dayName = state.lang==='cs' ? shortCs[day] : shortEn[day];
+    // format hour range and value for peak and low
+    const formatCell = (cell, isLow) => {
+      if(!cell) return '-';
+      // If low cell with 0 value and zero-range exists, show full range
+      if(isLow && cell.v === 0 && state.dailyZeroRanges && state.dailyZeroRanges[day]){
+        const zr = state.dailyZeroRanges[day];
+        if(zr && zr.len > 1){
+          const start = zr.start;
+          const end   = (zr.start + zr.len) % 24;
+          const hStart = String(start).padStart(2,'0');
+          const hEnd   = String(end).padStart(2,'0');
+          return `<span class="font-medium">${hStart}:00–${hEnd}:00</span> – 0.0%`;
+        }
+      }
+      const hStart = String(cell.x).padStart(2,'0');
+      const hEnd   = String((cell.x + 1) % 24).padStart(2,'0');
+      return `<span class="font-medium">${hStart}:00–${hEnd}:00</span> – ${(cell.v||0).toFixed(1)}%`;
+    };
+    const peakHtml = formatCell(peak, false);
+    const lowHtml  = formatCell(low, true);
+    rows.push(`<tr class="border-t"><td class="px-3 py-2 font-medium">${dayName}</td><td class="px-3 py-2">${peakHtml}</td><td class="px-3 py-2">${lowHtml}</td></tr>`);
+  }
+  tbody.innerHTML = rows.join('');
+  // Attach click handlers to show machines for each day and type (peak or low)
+  Array.from(tbody.querySelectorAll('tr')).forEach((tr, dayIdx) => {
+    tr.setAttribute('data-day', dayIdx);
+    const cells = tr.querySelectorAll('td');
+    // cells[1] is highest column, cells[2] is lowest column
+    ['peak','low'].forEach((type, i) => {
+      const cell = cells[i+1];
+      if(!cell) return;
+      cell.classList.add('cursor-pointer');
+      cell.addEventListener('click', (e) => {
+        e.stopPropagation();
+        toggleDailyDetail(dayIdx, type, tr);
+      });
+    });
+  });
+}
+
+// --- Week comparison ---
+function computeWeekComparison() {
+  // Uses state.weekly array; requires at least two weeks
+  if(!state.weekly || state.weekly.length < 2){
+    state.weekComparison = null;
+    return;
+  }
+  // take last two weeks (already sorted)
+  const w1 = state.weekly[state.weekly.length - 2];
+  const w2 = state.weekly[state.weekly.length - 1];
+  state.weekComparison = {
+    week1: w1.key,
+    week2: w2.key,
+    util1: w1.util * 100,
+    util2: w2.util * 100,
+    delta: (w2.util - w1.util) * 100
+  };
+}
+
+function renderWeekComparison(){
+  const container = document.getElementById('weekComparison');
+  if(!container) return;
+  const wc = state.weekComparison;
+  const L = state.lang === 'cs';
+  if(!wc){
+    // Not enough data message
+    container.innerHTML = `<p>${L ? t('week_compare_insufficient') : t('week_compare_insufficient')}</p>`;
+    return;
+  }
+  const diffClass = wc.delta >= 0 ? 'text-emerald-700' : 'text-rose-700';
+  const diffLabel = (wc.delta>=0?'+':'') + wc.delta.toFixed(1) + (L ? ' p.b.' : ' pp');
+  container.innerHTML = `
+    <div class="grid grid-cols-3 gap-4">
+      <div>
+        <div class="font-medium">${L ? 'Týden' : 'Week'} ${wc.week1}</div>
+        <div>${wc.util1.toFixed(1)}%</div>
+      </div>
+      <div>
+        <div class="font-medium">${L ? 'Týden' : 'Week'} ${wc.week2}</div>
+        <div>${wc.util2.toFixed(1)}%</div>
+      </div>
+      <div>
+        <div class="font-medium">${L ? 'Změna' : 'Change'}</div>
+        <div class="${diffClass}">${diffLabel}</div>
+      </div>
+    </div>`;
+}
+
+// --- Drivers summary ---
+function computeDriverSummary(){
+  const map = new Map();
+  for(const row of state.filtered){
+    // Handle driver column; alias for Ridic might be mapped during normalization
+    const drv = row['Řidič'] || row['Ridic'] || '';
+    const key = String(drv || '').trim() || '(neznámé)';
+    let obj = map.get(key);
+    if(!obj){
+      obj = { driver: key, sessions: 0, key_s: 0, op_s: 0, drive_s: 0, lift_s: 0, load_s: 0 };
+    }
+    obj.sessions += 1;
+    obj.key_s += row['Čas klíče (s)'] || 0;
+    obj.op_s += row['Provozní doba (s)'] || 0;
+    obj.drive_s += row['Čas jízdy (s)'] || 0;
+    obj.lift_s += row['Čas zdvihu (s)'] || 0;
+    obj.load_s += row['Čas se zátěží (s)'] || 0;
+    map.set(key, obj);
+  }
+  const arr = [];
+  for(const obj of map.values()){
+    const key_h = secToHours(obj.key_s);
+    const op_h = secToHours(obj.op_s);
+    const util = safeDiv(obj.op_s, obj.key_s);
+    arr.push({
+      driver: obj.driver,
+      sessions: obj.sessions,
+      key_h: key_h,
+      op_h: op_h,
+      util: util
+    });
+  }
+  state.drivers = arr;
+}
+
+function renderDrivers(){
+  const thead = document.getElementById('driversHead');
+  const tbody = document.getElementById('driversBody');
+  if(!thead || !tbody) return;
+  const L = state.lang === 'cs';
+  // Build table head
+  thead.innerHTML = '<tr>'
+    + `<th class="text-left px-3 py-2">${L ? 'Řidič' : 'Driver'}</th>`
+    + `<th class="text-left px-3 py-2">${L ? 'Sezení' : 'Sessions'}</th>`
+    + `<th class="text-left px-3 py-2">${L ? 'Klíč (h)' : 'Key (h)'}</th>`
+    + `<th class="text-left px-3 py-2">${L ? 'Provoz (h)' : 'Operating (h)'}</th>`
+    + `<th class="text-left px-3 py-2">${L ? 'Využití' : 'Utilization'}</th>`
+    + '</tr>';
+  tbody.innerHTML = state.drivers.map(d => {
+    const utilPct = d.util * 100;
+    const utilClass = utilPct >= (state.target * 100) ? 'text-emerald-700 font-semibold' : 'text-rose-700 font-semibold';
+    return '<tr class="border-t">' +
+      `<td class="px-3 py-2 font-medium">${d.driver}</td>` +
+      `<td class="px-3 py-2">${d.sessions}</td>` +
+      `<td class="px-3 py-2">${d.key_h.toFixed(2)}</td>` +
+      `<td class="px-3 py-2">${d.op_h.toFixed(2)}</td>` +
+      `<td class="px-3 py-2"><span class="${utilClass}">${utilPct.toFixed(1)}%</span></td>` +
+      '</tr>';
+  }).join('');
+
+  // Update help/legend text for driver details
+  const helpEl = document.getElementById('driversHelp');
+  if(helpEl){
+    const txt = t('drivers_help');
+    helpEl.innerHTML = txt ? txt.replace(/\n/g, '<br>') : '';
+  }
+}
+
+// --- Populate week selectors based on available weekly data ---
+function populateWeekSelects() {
+  const sel1 = document.getElementById('week1Select');
+  const sel2 = document.getElementById('week2Select');
+  if(!sel1 || !sel2) return;
+  // If no weekly data, clear options
+  if(!state.weekly || state.weekly.length === 0){
+    sel1.innerHTML = '';
+    sel2.innerHTML = '';
+    return;
+  }
+  const options = state.weekly.map(w => `<option value="${w.key}">${w.key}</option>`).join('');
+  sel1.innerHTML = options;
+  sel2.innerHTML = options;
+  // Preselect last two weeks if available
+  if(state.weekly.length >= 1){
+    sel2.value = state.weekly[state.weekly.length-1].key;
+    state.week2 = sel2.value;
+  }
+  if(state.weekly.length >= 2){
+    sel1.value = state.weekly[state.weekly.length-2].key;
+    state.week1 = sel1.value;
+  } else {
+    sel1.value = state.weekly[0].key;
+    state.week1 = sel1.value;
+  }
+}
+
+// --- Compute comparison based on selected type (weeks or dates) ---
+function computeComparison() {
+  // If compare by weeks
+  if(state.compareType === 'weeks'){
+    // Ensure week keys are selected
+    if(!state.week1 || !state.week2){
+      state.periodComparison = null;
+      return;
+    }
+    const w1 = (state.weekly || []).find(w => w.key === state.week1);
+    const w2 = (state.weekly || []).find(w => w.key === state.week2);
+    if(!w1 || !w2){
+      state.periodComparison = null;
+      return;
+    }
+    state.periodComparison = {
+      label1: state.week1,
+      label2: state.week2,
+      util1: w1.util * 100,
+      util2: w2.util * 100,
+      delta: (w2.util - w1.util) * 100
+    };
+  } else if(state.compareType === 'dates'){
+    // Compare two specific dates (one-day periods)
+    if(!state.date1 || !state.date2){
+      state.periodComparison = null;
+      return;
+    }
+    const computeDayUtil = (dateStr) => {
+      const start = new Date(dateStr + 'T00:00:00');
+      const end   = new Date(dateStr + 'T23:59:59');
+      let keySum = 0;
+      let opSum  = 0;
+      for(const r of state.filtered){
+        const s = r['Zapnutí stroje'];
+        if(!s) continue;
+        if(s < start || s > end) continue;
+        keySum += r['Čas klíče (s)'] || 0;
+        opSum  += r['Provozní doba (s)'] || 0;
+      }
+      if(keySum <= 0) return null;
+      return safeDiv(opSum, keySum) * 100;
+    };
+    const u1 = computeDayUtil(state.date1);
+    const u2 = computeDayUtil(state.date2);
+    if(u1 == null || u2 == null){
+      state.periodComparison = null;
+      return;
+    }
+    state.periodComparison = {
+      label1: state.date1,
+      label2: state.date2,
+      util1: u1,
+      util2: u2,
+      delta: (u2 - u1)
+    };
+  } else {
+    state.periodComparison = null;
+  }
+}
+
+// --- Render comparison result ---
+function renderComparison(){
+  const container = document.getElementById('comparisonResult');
+  if(!container) return;
+  const pc = state.periodComparison;
+  const L = state.lang === 'cs';
+  if(!pc){
+    container.innerHTML = `<p>${t('compare_insufficient')}</p>`;
+    return;
+  }
+  const diffClass = pc.delta >= 0 ? 'text-emerald-700' : 'text-rose-700';
+  const diffLabel = (pc.delta >= 0 ? '+' : '') + pc.delta.toFixed(1) + (L ? ' p.b.' : ' pp');
+  // Format labels: if week keys, prefix with "Týden" or "Week"; if dates, use date string (already). Detect pattern of ISO week (YYYY-Wxx).
+  const isWeek1 = /^\d{4}-W\d{2}$/.test(pc.label1);
+  const isWeek2 = /^\d{4}-W\d{2}$/.test(pc.label2);
+  const label1 = isWeek1 ? `${L ? 'Týden' : 'Week'} ${pc.label1}` : pc.label1;
+  const label2 = isWeek2 ? `${L ? 'Týden' : 'Week'} ${pc.label2}` : pc.label2;
+  const changeLabel = L ? 'Změna' : 'Change';
+  container.innerHTML = `
+    <div class="grid grid-cols-3 gap-4">
+      <div>
+        <div class="font-medium">${label1}</div>
+        <div>${pc.util1.toFixed(1)}%</div>
+      </div>
+      <div>
+        <div class="font-medium">${label2}</div>
+        <div>${pc.util2.toFixed(1)}%</div>
+      </div>
+      <div>
+        <div class="font-medium">${changeLabel}</div>
+        <div class="${diffClass}">${diffLabel}</div>
+      </div>
+    </div>`;
+}
+
+// Toggle detail row for daily extremes to show machines contributing to peak or low
+function toggleDailyDetail(dayIdx, type, row){
+  // if next row is a detail row, remove it
+  if(row.nextElementSibling && row.nextElementSibling.classList.contains('daily-detail-row')){
+    row.nextElementSibling.remove();
+    return;
+  }
+  // Determine hour range for this day & type
+  let startHour, endHour;
+  if(type === 'peak'){
+    const cell = (state.dailyPeaks||[])[dayIdx];
+    if(!cell){ return; }
+    startHour = cell.x;
+    endHour = cell.x + 1;
+  } else {
+    // low
+    const cell = (state.dailyLows||[])[dayIdx];
+    if(!cell){ return; }
+    if(cell.v === 0 && state.dailyZeroRanges && state.dailyZeroRanges[dayIdx]){
+      const zr = state.dailyZeroRanges[dayIdx];
+      startHour = zr.start;
+      endHour = zr.start + zr.len;
+    } else {
+      startHour = cell.x;
+      endHour = cell.x + 1;
+    }
+  }
+  // Normalize endHour to 0-24 range for cross-midnight
+  let rangeLen = endHour - startHour;
+  // Gather matching sessions
+  const matches = [];
+  for(const r of state.filtered){
+    const s = r['Zapnutí stroje'];
+    const e = r['Vypnutí stroje'];
+    if(!s || !e) continue;
+    let cur = new Date(s.getTime());
+    while(cur < e){
+      const h = cur.getHours();
+      const d = (cur.getDay() + 6) % 7;
+      const nextHour = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), cur.getHours()+1);
+      const segEnd = e < nextHour ? e : nextHour;
+      if(d === dayIdx){
+        // Check overlap with target range; handle cross midnight by mapping to extended range
+        // Compute offset in 0..48
+        const hOffset = h;
+        for(let i=0; i<rangeLen; i++){
+          const targetH = (startHour + i) % 24;
+          if(targetH === h){
+            matches.push(r);
+            i = rangeLen; // break outer
+            break;
+          }
+        }
+      }
+      cur = segEnd;
+    }
+  }
+  // Unique machines
+  const machines = Array.from(new Set(matches.map(r => r['Stroj'])));
+  // Build detail row
+  const detailTr = document.createElement('tr');
+  detailTr.className = 'daily-detail-row';
+  const td = document.createElement('td');
+  td.colSpan = 3;
+  const L = state.lang === 'cs';
+  if(machines.length){
+    td.innerHTML = `<div class="p-2 bg-slate-50 rounded"><b>${L ? (type === 'peak' ? 'Vozíky s nejvyšším využitím:' : 'Vozíky s nejnižším využitím:') : (type === 'peak' ? 'Machines at highest utilization:' : 'Machines at lowest utilization:')}</b> ${machines.join(', ')}</div>`;
+  } else {
+    td.innerHTML = `<div class="p-2 bg-slate-50 rounded italic text-slate-500">${L ? 'Žádné relace' : 'No sessions'}</div>`;
+  }
+  detailTr.appendChild(td);
+  row.parentNode.insertBefore(detailTr, row.nextElementSibling);
+}
+
+// --- Hourly heatmap ---
+function computeHeatmap(){
+  // reset if no rows
+  if(!state.filtered || !state.filtered.length){
+    state.heatmap = [];
+    return;
+  }
+  // 7x24 matrices for utilization ratio (accumulated minutes)
+  const utilMinutes = Array.from({length:7}, () => Array(24).fill(0));
+  const keyMinutes  = Array.from({length:7}, () => Array(24).fill(0));
+  for(const row of state.filtered){
+    const start = row["Zapnutí stroje"];
+    const end   = row["Vypnutí stroje"];
+    const key_s = row["Čas klíče (s)"] || 0;
+    const op_s  = row["Provozní doba (s)"] || 0;
+    const totalMs = ((end ? end.getTime() : 0) - (start ? start.getTime() : 0));
+    if(!start || !end || totalMs <= 0 || key_s <= 0) continue;
+    const ratio = safeDiv(op_s, key_s);
+    let cur = new Date(start.getTime());
+    while(cur < end){
+      const hour = cur.getHours();
+      const dayIdx = (cur.getDay() + 6) % 7;
+      const nextHour = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), cur.getHours()+1);
+      const segEnd = (end < nextHour ? end : nextHour);
+      const minutes = (segEnd - cur) / 60000;
+      if(minutes > 0){
+        utilMinutes[dayIdx][hour] += minutes * ratio;
+        keyMinutes[dayIdx][hour]  += minutes;
+      }
+      cur = segEnd;
+    }
+  }
+  const data = [];
+  for(let day=0; day<7; day++){
+    for(let hour=0; hour<24; hour++){
+      const km = keyMinutes[day][hour];
+      const um = utilMinutes[day][hour];
+      const val = km > 0 ? (um / km) * 100 : 0;
+      data.push({ x: hour, y: day, v: val });
+    }
+  }
+  state.heatmap = data;
+  // compute top 5 peak utilization cells
+  const sorted = data.slice().sort((a,b) => b.v - a.v);
+  state.peaks = sorted.slice(0, 5);
+  // compute bottom 5 lowest utilization cells (ascending)
+  const sortedAsc = data.slice().sort((a,b) => a.v - b.v);
+  state.lows = sortedAsc.slice(0, 5);
+
+  // compute best and worst hour per day
+  const dailyPeaks = Array(7).fill(null);
+  const dailyLows  = Array(7).fill(null);
+  for(const cell of data){
+    const day = cell.y;
+    // highest
+    if(!dailyPeaks[day] || cell.v > dailyPeaks[day].v){
+      dailyPeaks[day] = cell;
+    }
+    // lowest
+    if(!dailyLows[day] || cell.v < dailyLows[day].v){
+      dailyLows[day] = cell;
+    }
+  }
+  state.dailyPeaks = dailyPeaks;
+  state.dailyLows  = dailyLows;
+
+  // compute longest zero-utilization ranges per day (including wrap-around)
+  const dailyZeroRanges = [];
+  for(let day=0; day<7; day++){
+    // gather 24 hour utilization values for this day
+    const vals = [];
+    for(let hour=0; hour<24; hour++){
+      const idx = day * 24 + hour;
+      const cell = data[idx];
+      vals.push(cell ? cell.v : 0);
+    }
+    // create extended array for wrap-around search
+    const extended = vals.concat(vals);
+    let bestStart = -1;
+    let bestLen = 0;
+    let currentStart = null;
+    let currentLen = 0;
+    for(let i=0; i<extended.length; i++){
+      if(extended[i] === 0){
+        if(currentStart === null) currentStart = i;
+        currentLen++;
+        if(currentLen > bestLen){ bestLen = currentLen; bestStart = currentStart; }
+      } else {
+        currentStart = null;
+        currentLen = 0;
+      }
+    }
+    if(bestLen > 1){
+      dailyZeroRanges[day] = { start: bestStart % 24, len: bestLen > 24 ? 24 : bestLen };
+    } else {
+      dailyZeroRanges[day] = null;
+    }
+  }
+  state.dailyZeroRanges = dailyZeroRanges;
+}
+
+// Compute hourly utilization heatmap for a given array of rows (sessions)
+// Returns array of objects {x: hour, y: dayIdx, v: utilizationPercent}
+function computeHeatmapForRows(rows) {
+  if (!rows || !rows.length) return [];
+  // 7x24 matrices
+  const utilMinutes = Array.from({ length: 7 }, () => Array(24).fill(0));
+  const keyMinutes  = Array.from({ length: 7 }, () => Array(24).fill(0));
+  for (const row of rows) {
+    const start = row["Zapnutí stroje"];
+    const end   = row["Vypnutí stroje"];
+    const key_s = row["Čas klíče (s)"] || 0;
+    const op_s  = row["Provozní doba (s)"] || 0;
+    const totalMs = ((end ? end.getTime() : 0) - (start ? start.getTime() : 0));
+    if (!start || !end || totalMs <= 0 || key_s <= 0) continue;
+    const ratio = safeDiv(op_s, key_s);
+    let cur = new Date(start.getTime());
+    while (cur < end) {
+      const hour = cur.getHours();
+      const dayIdx = (cur.getDay() + 6) % 7;
+      const nextHour = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), cur.getHours() + 1);
+      const segEnd = (end < nextHour ? end : nextHour);
+      const minutes = (segEnd - cur) / 60000;
+      if (minutes > 0) {
+        utilMinutes[dayIdx][hour] += minutes * ratio;
+        keyMinutes[dayIdx][hour]  += minutes;
+      }
+      cur = segEnd;
+    }
+  }
+  const data = [];
+  for (let day = 0; day < 7; day++) {
+    for (let hour = 0; hour < 24; hour++) {
+      const km = keyMinutes[day][hour];
+      const um = utilMinutes[day][hour];
+      const val = km > 0 ? (um / km) * 100 : 0;
+      data.push({ x: hour, y: day, v: val });
+    }
+  }
+  return data;
+}
+
+function renderHeatmap(){
+  const canvas = document.getElementById('heatmapChart');
+  if(!canvas) return;
+  if(state.charts.heatmap) state.charts.heatmap.destroy();
+  // color gradient from red (0%) to green (100%)
+  const colorScale = (value) => {
+    const v = Math.max(0, Math.min(100, value));
+    const r = Math.round(255 - 2.55 * v);
+    const g = Math.round(2.55 * v);
+    const b = 80;
+    return `rgb(${r},${g},${b})`;
+  };
+  const data = state.heatmap || [];
+  state.charts.heatmap = new Chart(canvas, {
+    type: 'matrix',
+    data: {
+      datasets: [{
+        label: state.lang==='cs' ? 'Využití (%)' : 'Utilization (%)',
+        data: data,
+        backgroundColor: (ctx) => {
+          const v = ctx.dataset.data[ctx.dataIndex].v;
+          return colorScale(v);
+        },
+        borderColor: '#e5e7eb',
+        borderWidth: 1,
+        width: (ctx) => {
+          const area = ctx.chart.chartArea || {};
+          return area.width ? area.width / 24 - 1 : 12;
+        },
+        height: (ctx) => {
+          const area = ctx.chart.chartArea || {};
+          return area.height ? area.height / 7 - 1 : 12;
+        }
+      }]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      animation: false,
+      scales: {
+        x: {
+          type: 'linear',
+          position: 'bottom',
+          ticks: {
+            callback: (v) => v
+          },
+          min: -0.5,
+          max: 23.5,
+          grid: { display: false }
+        },
+        y: {
+          type: 'linear',
+          reverse: true,
+          ticks: {
+            callback: (v) => {
+              const daysCs = ['Po','Út','St','Čt','Pá','So','Ne'];
+              const daysEn = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+              return state.lang==='cs' ? daysCs[v] : daysEn[v];
+            }
+          },
+          min: -0.5,
+          max: 6.5,
+          grid: { display: false }
+        }
+      },
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            title: (items) => {
+              const r = items[0].raw;
+              const hour = String(r.x).padStart(2,'0') + ':00';
+              const daysCsFull = ['Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota','Neděle'];
+              const daysEnFull = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+              const dayName = state.lang==='cs' ? daysCsFull[r.y] : daysEnFull[r.y];
+              return `${dayName} ${hour}`;
+            },
+            label: (item) => {
+              return `${item.raw.v.toFixed(1)}%`;
+            }
+          }
+        }
+      }
+    }
+  });
+}
+
+// --- Expand/collapse detailed sessions for a group ---
+
+function toggleRowDetails(row){
+  // Collapse if already expanded
+  if (row.nextElementSibling && row.nextElementSibling.classList.contains('detail-row')) {
+    if (row._detailChart) {
+      try { row._detailChart.destroy(); } catch (ex) {}
+      row._detailChart = null;
+    }
+    row.nextElementSibling.remove();
+    return;
+  }
+  // Determine group name from first cell
+  const groupName = row.children[0].textContent.trim();
+  // Gather all sessions matching this group in current filter
+  const matches = state.filtered.filter(r => {
+    const key = String(r[state.groupBy] ?? '').trim() || '(neznámé)';
+    return key === groupName;
+  });
+  // Compute mini heatmap data for this group
+  const hmData = computeHeatmapForRows(matches);
+  // Compute 7x24 grid from hmData for day-hour table
+  const grid = Array.from({ length: 7 }, () => Array(24).fill(0));
+  hmData.forEach(c => { grid[c.y][c.x] = c.v; });
+  // Day labels depending on language
+  const daysCs = ['Po','Út','St','Čt','Pá','So','Ne'];
+  const daysEn = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+  const dayLabels = state.lang === 'cs' ? daysCs : daysEn;
+  // Build day-hour table with conditional colouring based on target
+  let dayHtml = '<div class="mt-2 overflow-auto"><table class="text-xs"><thead><tr><th class="px-2 py-1"></th>';
+  for(let h=0; h<24; h++){
+    const label = String(h).padStart(2,'0');
+    dayHtml += `<th class="px-2 py-1 text-center">${label}</th>`;
+  }
+  dayHtml += '</tr></thead><tbody>';
+  for(let d=0; d<7; d++){
+    dayHtml += `<tr><td class="px-2 py-1 font-medium">${dayLabels[d]}</td>`;
+    for(let h=0; h<24; h++){
+      const v = grid[d][h];
+      let cellClass = '';
+      let cellContent;
+        if (v <= 0) {
+        // For zero or negative values show a dash in muted colour
+        cellClass = 'text-slate-400';
+        cellContent = '–';
+      } else {
+        // Format percentage value to one decimal place
+        cellContent = v.toFixed(1) + '%';
+        // state.target is stored as a fraction (0–1), but v is a percentage (0–100)
+        // multiply state.target by 100 before comparison so 65% threshold works correctly
+        const thresholdPct = (state.target || 0) * 100;
+        cellClass = v >= thresholdPct ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800';
+      }
+      dayHtml += `<td class="px-2 py-1 text-center ${cellClass}">${cellContent}</td>`;
+    }
+    dayHtml += '</tr>';
+  }
+  dayHtml += '</tbody></table></div>';
+  // Build sessions table
+  const cols = ['Start','Konec','Klíč (h)','Provoz (h)','Jízda (h)','Zdvih (h)','Se zátěží (h)','Volnoběh (h)','Využití (%)'];
+  let sessHtml = '<div class="mt-3"><table class="min-w-full text-sm"><thead class="bg-slate-100"><tr>';
+  sessHtml += cols.map(c => `<th class="text-left px-2 py-1">${c}</th>`).join('');
+  sessHtml += '</tr></thead><tbody>';
+  matches.forEach(item => {
+    const s = item['Zapnutí stroje'];
+    const e = item['Vypnutí stroje'];
+    const key_h = secToHours(item['Čas klíče (s)'] || 0);
+    const op_h  = secToHours(item['Provozní doba (s)'] || 0);
+    const drive_h = secToHours(item['Čas jízdy (s)'] || 0);
+    const lift_h  = secToHours(item['Čas zdvihu (s)'] || 0);
+    const load_h  = secToHours(item['Čas se zátěží (s)'] || 0);
+    const idle_h  = Math.max(0, key_h - op_h);
+    const util    = safeDiv(op_h, key_h) * 100;
+    sessHtml += '<tr class="border-t">'
+      + `<td class="px-2 py-1">${s ? new Date(s).toLocaleString() : ''}</td>`
+      + `<td class="px-2 py-1">${e ? new Date(e).toLocaleString() : ''}</td>`
+      + `<td class="px-2 py-1">${key_h.toFixed(2)}</td>`
+      + `<td class="px-2 py-1">${op_h.toFixed(2)}</td>`
+      + `<td class="px-2 py-1">${drive_h.toFixed(2)}</td>`
+      + `<td class="px-2 py-1">${lift_h.toFixed(2)}</td>`
+      + `<td class="px-2 py-1">${load_h.toFixed(2)}</td>`
+      + `<td class="px-2 py-1">${idle_h.toFixed(2)}</td>`
+      + `<td class="px-2 py-1">${util.toFixed(1)}</td>`
+      + '</tr>';
+  });
+  sessHtml += '</tbody></table></div>';
+  // Assemble the detail HTML
+  const heatmapId = 'hm_' + Math.random().toString(36).substr(2, 8);
+  const hmTitle = t('heatmap_title') || (state.lang === 'cs' ? 'Hodinová heatmapa' : 'Hourly heatmap');
+  let html = '<div class="mt-2 mb-2 p-2 bg-slate-50 rounded">';
+  html += `<div class="mb-1 text-sm font-medium">${hmTitle}</div>`;
+  html += `<div class="mb-2" style="height:150px;"><canvas id="${heatmapId}"></canvas></div>`;
+  html += dayHtml;
+  html += sessHtml;
+  html += '</div>';
+  // Create detail row and insert into DOM
+  const detailTr = document.createElement('tr');
+  detailTr.className = 'detail-row';
+  const td = document.createElement('td');
+  td.colSpan = 10;
+  td.innerHTML = html;
+  detailTr.appendChild(td);
+  row.parentNode.insertBefore(detailTr, row.nextElementSibling);
+  // Render mini heatmap chart
+  const canvas = detailTr.querySelector(`#${heatmapId}`);
+  if (canvas) {
+    const colorScale = (value) => {
+      const v = Math.max(0, Math.min(100, value));
+      const rVal = Math.round(255 - 2.55 * v);
+      const gVal = Math.round(2.55 * v);
+      const bVal = 80;
+      return `rgb(${rVal},${gVal},${bVal})`;
+    };
+    const miniChart = new Chart(canvas, {
+      type: 'matrix',
+      data: {
+        datasets: [{
+          label: state.lang === 'cs' ? 'Využití (%)' : 'Utilization (%)',
+          data: hmData,
+          backgroundColor: (ctx) => {
+            const v = ctx.dataset.data[ctx.dataIndex].v;
+            return colorScale(v);
+          },
+          borderColor: '#e5e7eb',
+          borderWidth: 1,
+          width: (ctx) => {
+            const area = ctx.chart.chartArea || {};
+            return area.width ? area.width / 24 - 1 : 12;
+          },
+          height: (ctx) => {
+            const area = ctx.chart.chartArea || {};
+            return area.height ? area.height / 7 - 1 : 12;
+          }
+        }]
+      },
+      options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        animation: false,
+        scales: {
+          x: {
+            type: 'linear',
+            position: 'bottom',
+            ticks: {
+              callback: (v) => v
+            },
+            min: -0.5,
+            max: 23.5,
+            grid: { display: false }
+          },
+          y: {
+            type: 'linear',
+            reverse: true,
+            ticks: {
+              callback: (v) => {
+                const daysCs = ['Po','Út','St','Čt','Pá','So','Ne'];
+                const daysEn = ['Mon','Tue','Wed','Thu','Fri','Sat','Sun'];
+                return state.lang === 'cs' ? daysCs[v] : daysEn[v];
+              }
+            },
+            min: -0.5,
+            max: 6.5,
+            grid: { display: false }
+          }
+        },
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (items) => {
+                const r = items[0].raw;
+                const hourStr = String(r.x).padStart(2,'0') + ':00';
+                const daysCsFull = ['Pondělí','Úterý','Středa','Čtvrtek','Pátek','Sobota','Neděle'];
+                const daysEnFull = ['Monday','Tuesday','Wednesday','Thursday','Friday','Saturday','Sunday'];
+                const dayName = state.lang === 'cs' ? daysCsFull[r.y] : daysEnFull[r.y];
+                return `${dayName} ${hourStr}`;
+              },
+              label: (item) => `${item.raw.v.toFixed(1)}%`
+            }
+          }
+        }
+      }
+    });
+    row._detailChart = miniChart;
+  }
+}
+
+
+function toCsvWeeks(rows){
+  if(!rows || !rows.length) return '';
+  const HEADERS = ['ISO týden','Sezení','Klíč (h)','Provoz (h)','Využití'];
+  const csvRows = rows.map(w => [w.key, w.sessions, w.key_h.toFixed(2), w.op_h.toFixed(2), (w.util*100).toFixed(1)+'%'].join(';'));
+  return [HEADERS.join(';')].concat(csvRows).join('\n');
+}
+
+// --- CSV Export ---
+function toCsv(rows){
+  if(!rows.length) return "";
+  const cols = [
+    state.groupBy, "Stroje","Sezení","Čas klíče (h)","Provozní (h)","Využití",
+    "Jízda (h)","Zdvih (h)","Se zátěží (h)","Volnoběh (h)"
+  ];
+  const csv = [cols.join(";")].concat(rows.map(r => [
+    r.group, r.machines, r.sessions,
+    r.key_h.toFixed(2), r.op_h.toFixed(2), (r.util*100).toFixed(1)+"%",
+    r.drive_h.toFixed(2), r.lift_h.toFixed(2), r.load_h.toFixed(2), r.idle_h.toFixed(2)
+  ].join(";")));
+  return csv.join("\n");
+}
+
+const exportCsvBtn = document.getElementById("exportCsvBtn");
+if(exportCsvBtn){
+  exportCsvBtn.addEventListener("click", () => {
+    const csv = toCsv(state.grouped);
+    if(!csv){ alert("Žádná data"); return; }
+    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "machine_activity_summary.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+}
+
+document.getElementById("downloadReportBtn").addEventListener("click", () => {
+  const csv = toCsv(state.grouped);
+  if(!csv){ alert(state.lang==='cs' ? "Nejprve zpracujte data." : "Process data first."); return; }
+  const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+  const link = document.createElement("a");
+  link.href = URL.createObjectURL(blob);
+  link.download = "machine_activity_summary.csv";
+  link.click();
+  URL.revokeObjectURL(link.href);
+});
+
+const exportAnomBtn = document.getElementById("exportAnomBtn");
+if(exportAnomBtn){
+  exportAnomBtn.addEventListener("click", ()=>{
+    const csv = toCsvAnomalies(state.anomalies||[]);
+    if(!csv){ alert(state.lang==='cs' ? 'Žádné anomálie' : 'No anomalies'); return; }
+    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "machine_activity_anomalies.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+}
+
+// Print / PDF export button handler: triggers browser print dialog
+const printBtn = document.getElementById('printBtn');
+if(printBtn){
+  printBtn.addEventListener('click', () => {
+    window.print();
+  });
+}
+
+const exportWeeksBtn = document.getElementById("exportWeeksBtn");
+if(exportWeeksBtn){
+  exportWeeksBtn.addEventListener("click", () => {
+    const csv = toCsvWeeks(state.weekly||[]);
+    if(!csv){ alert(state.lang==='cs' ? 'Žádná týdenní data' : 'No weekly data'); return; }
+    const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+    const link = document.createElement("a");
+    link.href = URL.createObjectURL(blob);
+    link.download = "machine_activity_weeks.csv";
+    link.click();
+    URL.revokeObjectURL(link.href);
+  });
+}
+
+// init
+setLang("cs");
+</script>
+</body>
+</html>

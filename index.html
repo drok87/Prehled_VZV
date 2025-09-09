@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="cs">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>VZV Dashboard • Nehody + Využití</title>
+  <style>
+    :root { --tab-bg:#f1f5f9; --tab-active:#111827; --tab-inactive:#64748b; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; }
+    body { font-family:ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Arial, 'Apple Color Emoji','Segoe UI Emoji'; background:#f8fafc; color:#111827; }
+    header { display:flex; align-items:center; justify-content:space-between; padding:12px 16px; background:white; border-bottom:1px solid #e5e7eb; position:sticky; top:0; z-index:10; }
+    h1 { font-size:18px; margin:0; }
+    .tabs { display:flex; gap:8px; background:var(--tab-bg); padding:6px; border-radius:10px; }
+    .tab-btn { appearance:none; border:none; background:transparent; padding:8px 12px; border-radius:8px; font-weight:600; color:var(--tab-inactive); cursor:pointer; }
+    .tab-btn[aria-selected="true"] { background:white; color:var(--tab-active); box-shadow: 0 1px 2px rgba(0,0,0,.05); }
+    .wrap { height:calc(100% - 56px); display:flex; flex-direction:column; }
+    .pane { display:none; height:100%; }
+    .pane.active { display:block; }
+    iframe { width:100%; height:calc(100vh - 64px); border:0; background:white; }
+    footer { position:fixed; right:8px; bottom:8px; font-size:12px; color:#64748b; }
+    .msg { padding:12px 16px; font-size:14px; color:#475569; }
+    @media print { header, .tabs, footer { display:none !important; } iframe { height:100vh; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>VZV Dashboard <span style="color:#94a3b8;">— Nehody &amp; Využití</span></h1>
+    <div class="tabs" role="tablist" aria-label="Sekce">
+      <button class="tab-btn" role="tab" id="tab-nehody-btn" aria-controls="pane-nehody" aria-selected="true">Nehody VZV</button>
+      <button class="tab-btn" role="tab" id="tab-vyuziti-btn" aria-controls="pane-vyuziti" aria-selected="false">Využití VZV</button>
+    </div>
+  </header>
+
+  <div class="wrap">
+    <section id="pane-nehody" class="pane active" role="tabpanel" aria-labelledby="tab-nehody-btn">
+      <div class="msg">Pokud se obsah nenačte, otevři prosím tento soubor společně s <b>nehody.html</b> ve stejné složce.</div>
+      <iframe title="Nehody VZV" src="./nehody.html"></iframe>
+    </section>
+
+    <section id="pane-vyuziti" class="pane" role="tabpanel" aria-labelledby="tab-vyuziti-btn">
+      <div class="msg">Pokud se obsah nenačte, otevři prosím tento soubor společně s <b>vyuziti.html</b> ve stejné složce.</div>
+      <iframe title="Využití VZV" src="./vyuziti.html"></iframe>
+    </section>
+  </div>
+
+  <footer>Tip: Pro Safari a ochrany soukromí je spolehlivější varianta s lokálními soubory (žádné data: URL).</footer>
+
+  <script>
+    const tabs = [
+      { btn: document.getElementById('tab-nehody-btn'), pane: document.getElementById('pane-nehody') },
+      { btn: document.getElementById('tab-vyuziti-btn'), pane: document.getElementById('pane-vyuziti') }
+    ];
+    function activate(idx){ tabs.forEach((t,i)=>{ const active = i===idx; t.btn.setAttribute('aria-selected', active?'true':'false'); t.pane.classList.toggle('active', active); }); }
+    tabs.forEach((t, i)=> t.btn.addEventListener('click', ()=> activate(i)));
+
+    // Remember last active tab
+    const KEY = 'vzv_combined_active_tab';
+    const saved = Number(localStorage.getItem(KEY));
+    if(!Number.isNaN(saved)) activate(saved);
+    tabs.forEach((t,i)=> t.btn.addEventListener('click', ()=> localStorage.setItem(KEY, String(i))));
+  </script>
+</body>
+</html>
