@@ -7,1075 +7,1285 @@
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-  <!-- Matrix/heatmap plugin for Chart.js -->
   <script src="https://cdn.jsdelivr.net/npm/chartjs-chart-matrix@1.3.0/dist/chartjs-chart-matrix.min.js"></script>
   <style>
-    /* Styly pro drag-and-drop zónu */
-    .dropzone { 
-      border: 2px dashed #cbd5e1; 
-      transition: border-color 0.15s ease-in-out, background-color 0.15s ease-in-out;
-    }
-    .dropzone.dragover { 
-      border-color: #6366f1; 
-      background-color: #f5f3ff; /* Světle fialová */
-    }
-    /* Styly pro tabulky */
-    th, td { 
-      white-space: nowrap; 
-      padding: 0.5rem 0.75rem; /* Více místa */
-    }
-    .table-wrap { 
-      overflow: auto; 
-      max-height: 50vh; /* Omezení výšky pro lepší přehlednost */
-      border-radius: 0.5rem;
-      border: 1px solid #e5e7eb;
-    }
-    /* Styly pro grafy */
-    .chart-box { 
-      position: relative; 
-      height: 280px; 
-      /* Zajištění responzivity Chart.js */
-    }
-    .chart-box canvas { 
-      width: 100% !important; 
-      height: 100% !important; 
-    }
-    /* Sticky header pro tabulky */
-    .table-wrap thead th {
-      position: sticky;
-      top: 0;
-      z-index: 10; /* Vyšší z-index pro překrytí */
-      background: #f9fafb; /* Světlejší pozadí */
-      border-bottom: 1px solid #e5e7eb;
-    }
-
-    /* Tiskové styly pro export do PDF */
-    @media print {
-      body { 
-        background-color: #fff; 
-        color: #000;
-      }
-      .no-print { 
-        display: none !important; 
-      }
-      .page-break { 
-        page-break-before: always; 
-      }
-      /* Grafy a tabulky na šířku */
-      .chart-container, .table-wrap {
-        width: 100%;
-        margin-bottom: 20px;
-      }
-    }
+    .dropzone { border: 2px dashed #cbd5e1; }
+    .dropzone.dragover { border-color: #6366f1; background-color: #f5f3ff; }
+    th, td { white-space: nowrap; }
+    .table-wrap { overflow: auto; }
+    .chart-box { position: relative; height: 280px; }
+    .chart-box canvas { width: 100% !important; height: 100% !important; }
+.table-wrap thead th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: #f8fafc; /* Tailwind: slate-50 */
+  box-shadow: 0 1px 0 rgba(0, 0, 0, 0.05);
+}
   </style>
 </head>
-<body class="bg-gray-50 font-sans p-4 md:p-8 text-gray-800">
+<body class="bg-gray-50 p-4 font-sans print:p-0">
 
-  <header class="mb-8 pb-4 border-b border-gray-200 no-print">
-    <h1 class="text-3xl font-bold text-indigo-700">Analýza aktivit strojů</h1>
-    <p class="text-lg text-gray-500">Nahrávání a vizualizace dat o využití strojů</p>
-  </header>
+  <div class="max-w-7xl mx-auto bg-white shadow-xl rounded-lg p-6 print:shadow-none print:rounded-none print:p-0">
 
-  <main class="max-w-7xl mx-auto">
-    
-    <!-- Sekce pro nahrávání souboru -->
-    <section id="uploadSection" class="mb-10 p-6 bg-white rounded-xl shadow-lg no-print">
-      <h2 id="uploadTitle" class="text-xl font-semibold mb-4 text-gray-700">Nahrát datový soubor (CSV/XLSX)</h2>
-      <div id="dropzone" class="dropzone p-8 text-center rounded-lg cursor-pointer bg-gray-50 transition duration-150 ease-in-out">
-        <p id="dropzoneText" class="text-gray-500">Přetáhněte soubor sem, nebo klikněte pro výběr</p>
-        <input type="file" id="fileInput" class="hidden" accept=".csv, .xlsx, .xls" />
-      </div>
-      <p id="errorMsg" class="text-red-500 mt-2 hidden"></p>
-    </section>
+    <header class="flex justify-between items-center pb-4 mb-4 border-b print:hidden">
+      <h1 class="text-2xl font-bold text-gray-800">Analýza aktivit strojů <span class="text-gray-400">• Machine Activity Analyzer</span></h1>
+      <button id="langSwitch" class="px-3 py-1 bg-blue-500 text-white text-sm rounded hover:bg-blue-600 transition">English</button>
+    </header>
 
-    <!-- Zobrazení ovládacích prvků, pokud jsou data nahrána -->
-    <div id="controls" class="hidden no-print">
-      <div class="flex flex-wrap items-center justify-between mb-6 p-4 bg-white rounded-xl shadow-lg">
-        <div class="flex items-center space-x-4">
-          <label for="langSwitch" class="text-gray-700 font-medium" id="langLabel">Jazyk:</label>
-          <select id="langSwitch" class="p-2 border border-gray-300 rounded-lg focus:ring-indigo-500 focus:border-indigo-500">
-            <option value="cs">Čeština</option>
-            <option value="en">English</option>
-          </select>
-        </div>
-        <div class="flex flex-wrap space-x-2 mt-4 md:mt-0">
-          <button id="exportAnomBtn" class="bg-red-500 hover:bg-red-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out">
-            Exportovat Anomálie (CSV)
-          </button>
-          <button id="exportSummBtn" class="bg-indigo-500 hover:bg-indigo-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out">
-            Exportovat Souhrn (CSV)
-          </button>
-          <button id="exportWeeksBtn" class="bg-green-500 hover:bg-green-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out">
-            Exportovat Týdenní (CSV)
-          </button>
-          <button id="printBtn" class="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-2 px-4 rounded-lg shadow transition duration-150 ease-in-out">
-            Tisk / Export PDF
-          </button>
-        </div>
-      </div>
+    <div id="dropZone" class="dropzone p-8 text-center rounded-lg cursor-pointer transition hover:bg-gray-50 print:hidden">
+      <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16a4 4 0 01-4-4v-1a4 4 0 018 0v1a4 4 0 01-4 4zm0 0l-1.5 1.5M7 16h-.5m4 0h.5m-1 0v-.5m0 1v.5M12 4v16m8-8h-8"/>
+      </svg>
+      <p id="dropText" class="mt-1 text-sm text-gray-600">Přetáhněte sem **XLSX/CSV report** nebo klikněte pro výběr souboru.</p>
+      <input type="file" id="fileInput" accept=".xlsx,.xls,.csv" class="hidden" />
     </div>
 
-    <!-- Sekce s výsledky -->
-    <div id="resultsSection" class="hidden">
-      
-      <!-- Souhrnná data -->
-      <section class="mb-10 p-6 bg-white rounded-xl shadow-lg">
-        <h2 id="summaryTitle" class="text-2xl font-semibold mb-4 text-indigo-700">Souhrn aktivit</h2>
-        <div id="summaryTable" class="table-wrap">
-          <!-- Zde se dynamicky vloží tabulka Souhrnných dat -->
-        </div>
-      </section>
+    <div id="content" class="hidden">
 
-      <!-- Týdenní data - Graf a Tabulka -->
-      <section class="mb-10 p-6 bg-white rounded-xl shadow-lg page-break">
-        <h2 id="weeklyTitle" class="text-2xl font-semibold mb-4 text-indigo-700">Týdenní aktivita</h2>
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          <div class="chart-container">
-            <h3 id="weeklyChartTitle" class="text-xl font-medium mb-3">Graf týdenní aktivity</h3>
-            <div class="chart-box">
-              <canvas id="weeklyChart"></canvas>
-            </div>
-          </div>
-          <div class="table-container">
-            <h3 id="weeklyTableTitle" class="text-xl font-medium mb-3">Tabulka týdenní aktivity</h3>
-            <div id="weeklyTable" class="table-wrap">
-              <!-- Zde se dynamicky vloží tabulka Týdenních dat -->
-            </div>
+      <div id="filters" class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6 print:hidden">
+
+        <div class="space-y-1">
+          <label class="block text-sm font-medium text-gray-700">Datum od/do</label>
+          <div class="flex space-x-2">
+            <input type="date" id="dateFrom" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2" />
+            <input type="date" id="dateTo" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2" />
           </div>
         </div>
-      </section>
 
-      <!-- Analýza anomálií -->
-      <section id="anomaliesSection" class="mb-10 p-6 bg-white rounded-xl shadow-lg page-break">
-        <h2 id="anomaliesTitle" class="text-2xl font-semibold mb-4 text-indigo-700">Detekce a analýza anomálií</h2>
-        <p id="anomaliesCount" class="mb-4 text-lg text-red-600 font-medium hidden">
-          <!-- Zde se dynamicky vloží počet anomálií -->
-        </p>
-        <div id="anomaliesTable" class="table-wrap">
-          <!-- Zde se dynamicky vloží tabulka anomálií -->
+        <div class="space-y-1">
+          <label for="shiftFilter" class="block text-sm font-medium text-gray-700">Směna</label>
+          <select id="shiftFilter" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2">
+            <option value="all">Všechny směny</option>
+            <option value="RANNÍ (06:00-14:00)">RANNÍ (06:00-14:00)</option>
+            <option value="ODPOLEDNÍ (14:00-22:00)">ODPOLEDNÍ (14:00-22:00)</option>
+            <option value="NOČNÍ (22:00-06:00)">NOČNÍ (22:00-06:00)</option>
+          </select>
         </div>
-        <p id="noAnomaliesMsg" class="text-gray-500 mt-4 hidden">Nebyly detekovány žádné anomálie.</p>
-      </section>
 
-      <!-- Heatmap využití (Denní/Hodinové) -->
-      <section class="mb-10 p-6 bg-white rounded-xl shadow-lg page-break">
-        <h2 id="heatmapTitle" class="text-2xl font-semibold mb-4 text-indigo-700">Denní/Hodinová Heatmapa využití</h2>
-        <div class="chart-container">
+        <div class="space-y-1">
+          <label for="warehouseFilter" class="block text-sm font-medium text-gray-700">Sklad/Provoz</label>
+          <select id="warehouseFilter" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2">
+            <option value="all">Všechny lokace</option>
+            </select>
+        </div>
+
+        <div class="space-y-1">
+          <label for="groupBy" class="block text-sm font-medium text-gray-700">Seskupit dle</label>
+          <select id="groupBy" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2">
+            <option value="machine">Stroj (Flotilní označení)</option>
+            <option value="driver">Řidič</option>
+            <option value="group">Skupina (Typ stroje)</option>
+            <option value="date">Datum</option>
+          </select>
+        </div>
+
+        <div class="space-y-1">
+          <label for="metricSelector" class="block text-sm font-medium text-gray-700">Metrika v tabulce</label>
+          <select id="metricSelector" class="w-full border-gray-300 rounded-md shadow-sm focus:ring-blue-500 focus:border-blue-500 sm:text-sm p-2">
+            <option value="utilization">Využití (%)</option>
+            <option value="keyOnTime">Čas klíče (hod)</option>
+            <option value="operationTime">Provozní doba (hod)</option>
+            <option value="idleTime">Volnoběh (hod)</option>
+            <option value="travelTime">Jízda (hod)</option>
+            <option value="liftTime">Zdvih (hod)</option>
+            <option value="totalTime">Celkem aktivit (hod)</option>
+          </select>
+        </div>
+
+        <div class="space-y-1 flex items-end">
+          <button id="anomaliesBtn" class="w-full bg-yellow-500 text-white text-sm rounded hover:bg-yellow-600 transition p-2">
+            Hledat anomálie
+          </button>
+        </div>
+
+        <div class="space-y-1 flex items-end col-span-2 space-x-2">
+          <button id="exportTableBtn" class="flex-1 bg-green-500 text-white text-sm rounded hover:bg-green-600 transition p-2">
+            Export Tabulky (CSV)
+          </button>
+          <button id="exportAnomBtn" class="flex-1 bg-orange-500 text-white text-sm rounded hover:bg-orange-600 transition p-2">
+            Export Anomálií (CSV)
+          </button>
+          <button id="exportWeeksBtn" class="flex-1 bg-purple-500 text-white text-sm rounded hover:bg-purple-600 transition p-2">
+            Export Týdenní (CSV)
+          </button>
+          <button id="printBtn" class="flex-1 bg-gray-500 text-white text-sm rounded hover:bg-gray-600 transition p-2">
+            Tisk / PDF
+          </button>
+        </div>
+      </div>
+
+      <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Grafické shrnutí</h2>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+
+        <div class="bg-white p-4 border rounded-lg shadow-sm">
+          <h3 id="chart1Title" class="text-lg font-medium text-gray-800 mb-2">Využití podle skupiny (průměr)</h3>
+          <div class="chart-box">
+            <canvas id="utilizationChart"></canvas>
+          </div>
+        </div>
+
+        <div class="bg-white p-4 border rounded-lg shadow-sm">
+          <h3 id="chart2Title" class="text-lg font-medium text-gray-800 mb-2">Rozklad času všech strojů (celkem)</h3>
+          <div class="chart-box">
+            <canvas id="timeBreakdownChart"></canvas>
+          </div>
+        </div>
+
+        <div class="lg:col-span-2 bg-white p-4 border rounded-lg shadow-sm">
+          <h3 id="chart3Title" class="text-lg font-medium text-gray-800 mb-2">Hodinová heatmapa aktivit</h3>
           <div class="chart-box" style="height: 400px;">
             <canvas id="heatmapChart"></canvas>
           </div>
         </div>
-      </section>
-      
+      </div>
+
+      <h2 class="text-xl font-semibold text-gray-700 mt-8 mb-4">Souhrnná tabulka aktivit</h2>
+      <div class="table-wrap bg-white p-4 border rounded-lg shadow-sm">
+        <table id="summaryTable" class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" id="tableHeaderKey">Stroj/Řidič/Skupina</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider" id="tableHeaderMetric">Využití (%)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Počet záznamů</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Čas klíče (hod)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provozní doba (hod)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Volnoběh (hod)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Jízda (hod)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Zdvih (hod)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Celkem (hod)</th>
+            </tr>
+          </thead>
+          <tbody id="summaryTableBody" class="bg-white divide-y divide-gray-200">
+            </tbody>
+        </table>
+      </div>
+
+      <h2 id="weeklyTitle" class="text-xl font-semibold text-gray-700 mt-8 mb-4">Týdenní přehled (celkové využití)</h2>
+      <div id="weeklyTableWrap" class="table-wrap bg-white p-4 border rounded-lg shadow-sm">
+        <table id="weeklyTable" class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Týden</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Využití (%)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Počet záznamů</th>
+            </tr>
+          </thead>
+          <tbody id="weeklyTableBody" class="bg-white divide-y divide-gray-200">
+            </tbody>
+        </table>
+      </div>
+
+
+      <h2 id="anomalyTitle" class="text-xl font-semibold text-gray-700 mt-8 mb-4 hidden">Detekované anomálie</h2>
+      <div id="anomalyTableWrap" class="table-wrap bg-white p-4 border rounded-lg shadow-sm hidden">
+        <table id="anomalyTable" class="min-w-full divide-y divide-gray-200">
+          <thead class="bg-gray-50">
+            <tr>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Datum</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Stroj</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Řidič</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Důvod</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Čas klíče (s)</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Provozní doba (s)</th>
+            </tr>
+          </thead>
+          <tbody id="anomalyTableBody" class="bg-white divide-y divide-gray-200">
+            </tbody>
+        </table>
+      </div>
     </div>
+  </div>
 
-  </main>
+  <script>
+    // =========================================================================================
+    // GLOBAL STATE & CONSTANTS
+    // =========================================================================================
 
-  <footer class="mt-12 pt-4 border-t border-gray-200 text-center text-sm text-gray-500">
-    <p>&copy; 2024 Nástroj pro analýzu aktivit strojů</p>
-  </footer>
+    const COL_MAP = {
+      'cs': {
+        'date': 'Datum',
+        'machineName': 'Flotilní označení',
+        'driverName': 'Řidič',
+        'groupName': 'Skupina (Typ)',
+        'warehouse': 'Sklad/Provoz',
+        'keyOnTime': 'Čas klíče (s)',
+        'operationTime': 'Provozní doba (s)',
+        'idleTime': 'Volnoběh (s)',
+        'travelTime': 'Jízda (s)',
+        'liftTime': 'Zdvih (s)',
+      },
+      'en': {
+        'date': 'Date',
+        'machineName': 'Fleet Label',
+        'driverName': 'Driver',
+        'groupName': 'Group (Type)',
+        'warehouse': 'Warehouse/Operation',
+        'keyOnTime': 'Key-on Time (s)',
+        'operationTime': 'Operation Time (s)',
+        'idleTime': 'Idle Time (s)',
+        'travelTime': 'Travel Time (s)',
+        'liftTime': 'Lift Time (s)',
+      }
+    };
 
-  <script type="module">
-    // Globální stav aplikace
     const state = {
-      data: null, // Původní data
-      summary: null, // Souhrnná data
-      weekly: null, // Týdenní data
-      heatmap: null, // Data pro heatmapu
-      anomalies: null, // Detekované anomálie
-      lang: 'cs', // Výchozí jazyk
-      charts: {
-        weekly: null,
-        heatmap: null
-      }
-    };
-
-    // Pole pro mapování anglických a českých sloupců
-    const COLUMN_MAP = {
-      'cs': {
-        'Machine ID': 'ID Stroje',
-        'Total Operating Time (h)': 'Celková doba chodu (h)',
-        'Average Operating Time (h)': 'Průměrná doba chodu (h)',
-        'Max Operating Time (h)': 'Max. doba chodu (h)',
-        'Min Operating Time (h)': 'Min. doba chodu (h)',
-        'Total Downtime (h)': 'Celková doba nečinnosti (h)',
-        'Utilization (%)': 'Využití (%)',
-        'Week Start': 'Začátek Týdne',
-        'Operating Time (h)': 'Doba Chodu (h)',
-        'DayOfWeek': 'Den v Týdnu',
-        'Hour': 'Hodina',
-        'Value': 'Hodnota',
-        'Date': 'Datum',
-        'Anomaly Score': 'Skóre Anomálie',
-        'Type': 'Typ Anomálie'
+      data: [],
+      filteredData: [],
+      groupedData: [],
+      weekly: [],
+      anomalies: [],
+      lang: 'cs',
+      shiftTimes: {
+        'RANNÍ (06:00-14:00)': { start: 6, end: 14 },
+        'ODPOLEDNÍ (14:00-22:00)': { start: 14, end: 22 },
+        'NOČNÍ (22:00-06:00)': { start: 22, end: 6 } // Night shift crosses midnight
       },
-      'en': {
-        'ID Stroje': 'Machine ID',
-        'Celková doba chodu (h)': 'Total Operating Time (h)',
-        'Průměrná doba chodu (h)': 'Average Operating Time (h)',
-        'Max. doba chodu (h)': 'Max Operating Time (h)',
-        'Min. doba chodu (h)': 'Min Operating Time (h)',
-        'Celková doba nečinnosti (h)': 'Total Downtime (h)',
-        'Využití (%)': 'Utilization (%)',
-        'Začátek Týdne': 'Week Start',
-        'Doba Chodu (h)': 'Operating Time (h)',
-        'Den v Týdnu': 'DayOfWeek',
-        'Hodina': 'Hour',
-        'Hodnota': 'Value',
-        'Datum': 'Date',
-        'Skóre Anomálie': 'Anomaly Score',
-        'Typ Anomálie': 'Type'
-      }
+      chartInstances: {}
     };
 
-    // Pole pro názvy dnů v týdnu pro heatmapu
-    const DAY_NAMES = {
-      'cs': ['Po', 'Út', 'St', 'Čt', 'Pá', 'So', 'Ne'],
-      'en': ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
+    // =========================================================================================
+    // DOM ELEMENTS
+    // =========================================================================================
+
+    const dropZone = document.getElementById('dropZone');
+    const fileInput = document.getElementById('fileInput');
+    const dropText = document.getElementById('dropText');
+    const langSwitch = document.getElementById('langSwitch');
+    const contentDiv = document.getElementById('content');
+    const dateFromInput = document.getElementById('dateFrom');
+    const dateToInput = document.getElementById('dateTo');
+    const shiftFilter = document.getElementById('shiftFilter');
+    const warehouseFilter = document.getElementById('warehouseFilter');
+    const groupBySelect = document.getElementById('groupBy');
+    const metricSelector = document.getElementById('metricSelector');
+    const summaryTableBody = document.getElementById('summaryTableBody');
+    const weeklyTableBody = document.getElementById('weeklyTableBody');
+    const tableHeaderKey = document.getElementById('tableHeaderKey');
+    const tableHeaderMetric = document.getElementById('tableHeaderMetric');
+    const anomaliesBtn = document.getElementById('anomaliesBtn');
+    const anomalyTitle = document.getElementById('anomalyTitle');
+    const anomalyTableWrap = document.getElementById('anomalyTableWrap');
+    const anomalyTableBody = document.getElementById('anomalyTableBody');
+
+    // =========================================================================================
+    // UTILITY FUNCTIONS
+    // =========================================================================================
+
+    /** Converts seconds to hours (formatted string). */
+    const toHours = (seconds) => (seconds / 3600).toFixed(2);
+
+    /** Converts seconds to hours (float). */
+    const toHoursFloat = (seconds) => seconds / 3600;
+
+    /** Formats a percentage value. */
+    const toPercent = (value) => (value).toFixed(1) + '%';
+
+    /** Formats a date string (YYYY-MM-DD) to a more readable format. */
+    const formatDate = (dateString, lang) => {
+      const date = new Date(dateString);
+      if (isNaN(date)) return dateString;
+      const options = lang === 'cs' ? { day: 'numeric', month: 'numeric', year: 'numeric' } : { year: 'numeric', month: 'short', day: 'numeric' };
+      return date.toLocaleDateString(lang === 'cs' ? 'cs-CZ' : 'en-US', options);
     };
 
-    // Objekt pro lokalizaci textů
-    const localization = {
-      'cs': {
-        uploadTitle: 'Nahrát datový soubor (CSV/XLSX)',
-        dropzoneText: 'Přetáhněte soubor sem, nebo klikněte pro výběr',
-        langLabel: 'Jazyk:',
-        summaryTitle: 'Souhrn aktivit',
-        weeklyTitle: 'Týdenní aktivita',
-        weeklyChartTitle: 'Graf týdenní aktivity',
-        weeklyTableTitle: 'Tabulka týdenní aktivity',
-        anomaliesTitle: 'Detekce a analýza anomálií',
-        noAnomaliesMsg: 'Nebyly detekovány žádné anomálie.',
-        heatmapTitle: 'Denní/Hodinová Heatmapa využití',
-        noData: 'Chyba: Nebyla nalezena data.',
-        invalidFormat: 'Chyba: Neplatný formát souboru nebo chybějící sloupce (očekáván: ID Stroje, Datum, Doba Chodu (h)).',
-        exportAnom: 'Exportovat Anomálie (CSV)',
-        exportSumm: 'Exportovat Souhrn (CSV)',
-        exportWeeks: 'Exportovat Týdenní (CSV)',
-        print: 'Tisk / Export PDF',
-        noAnomaliesAlert: 'Žádné anomálie',
-        noWeeklyAlert: 'Žádná týdenní data',
-        loading: 'Načítání dat...',
-        processing: 'Zpracování dat a analýza...',
-        anomaliesCountText: (count) => `Detekováno ${count} anomálií. Doporučujeme kontrolu.`,
-        days: DAY_NAMES['cs']
-      },
-      'en': {
-        uploadTitle: 'Upload Data File (CSV/XLSX)',
-        dropzoneText: 'Drag and drop file here, or click to select',
-        langLabel: 'Language:',
-        summaryTitle: 'Activity Summary',
-        weeklyTitle: 'Weekly Activity',
-        weeklyChartTitle: 'Weekly Activity Chart',
-        weeklyTableTitle: 'Weekly Activity Table',
-        anomaliesTitle: 'Anomaly Detection and Analysis',
-        noAnomaliesMsg: 'No anomalies detected.',
-        heatmapTitle: 'Day/Hour Utilization Heatmap',
-        noData: 'Error: No data found.',
-        invalidFormat: 'Error: Invalid file format or missing columns (Expected: Machine ID, Date, Operating Time (h)).',
-        exportAnom: 'Export Anomalies (CSV)',
-        exportSumm: 'Export Summary (CSV)',
-        exportWeeks: 'Export Weekly (CSV)',
-        print: 'Print / Export PDF',
-        noAnomaliesAlert: 'No anomalies',
-        noWeeklyAlert: 'No weekly data',
-        loading: 'Loading data...',
-        processing: 'Processing data and analysis...',
-        anomaliesCountText: (count) => `Detected ${count} anomalies. Review recommended.`,
-        days: DAY_NAMES['en']
-      }
+    /** Formats date from YYYY-MM-DD to ISO week format YYYY-W## */
+    const getWeekNumber = (d) => {
+        d = new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()));
+        d.setUTCDate(d.getUTCDate() + 4 - (d.getUTCDay()||7));
+        const yearStart = new Date(Date.UTC(d.getUTCFullYear(),0,1));
+        const weekNo = Math.ceil(( ( (d - yearStart) / 86400000) + 1)/7);
+        return d.getUTCFullYear() + '-W' + (weekNo < 10 ? '0' : '') + weekNo;
     };
 
-    // ---- Funkce pro manipulaci s DOM a lokalizaci ----
 
-    // Funkce pro zobrazení/skrytí chybové zprávy
-    function displayError(message) {
-      const errorMsg = document.getElementById('errorMsg');
-      errorMsg.textContent = message;
-      errorMsg.classList.remove('hidden');
-      document.getElementById('resultsSection').classList.add('hidden');
-      document.getElementById('controls').classList.add('hidden');
-    }
+    /** Calculates the correct shift based on time. */
+    const getShift = (date) => {
+      const hours = date.getHours();
+      // Night shift crosses midnight (22:00 - 05:59)
+      if (hours >= 22 || hours < 6) return state.lang === 'cs' ? 'NOČNÍ (22:00-06:00)' : 'NIGHT (22:00-06:00)';
+      // Morning shift (06:00 - 13:59)
+      if (hours >= 6 && hours < 14) return state.lang === 'cs' ? 'RANNÍ (06:00-14:00)' : 'MORNING (06:00-14:00)';
+      // Afternoon shift (14:00 - 21:59)
+      if (hours >= 14 && hours < 22) return state.lang === 'cs' ? 'ODPOLEDNÍ (14:00-22:00)' : 'AFTERNOON (14:00-22:00)';
+      return state.lang === 'cs' ? 'Neznámá' : 'Unknown';
+    };
 
-    // Funkce pro lokalizaci prvků na stránce
-    function updateLocalization() {
-      const texts = localization[state.lang];
-      document.getElementById('uploadTitle').textContent = texts.uploadTitle;
-      document.getElementById('dropzoneText').textContent = texts.dropzoneText;
-      document.getElementById('langLabel').textContent = texts.langLabel;
-      document.getElementById('summaryTitle').textContent = texts.summaryTitle;
-      document.getElementById('weeklyTitle').textContent = texts.weeklyTitle;
-      document.getElementById('weeklyChartTitle').textContent = texts.weeklyChartTitle;
-      document.getElementById('weeklyTableTitle').textContent = texts.weeklyTableTitle;
-      document.getElementById('anomaliesTitle').textContent = texts.anomaliesTitle;
-      document.getElementById('noAnomaliesMsg').textContent = texts.noAnomaliesMsg;
-      document.getElementById('heatmapTitle').textContent = texts.heatmapTitle;
-
-      document.getElementById('exportAnomBtn').textContent = texts.exportAnom;
-      document.getElementById('exportSummBtn').textContent = texts.exportSumm;
-      document.getElementById('exportWeeksBtn').textContent = texts.exportWeeks;
-      document.getElementById('printBtn').textContent = texts.print;
-
-      // Aktualizace tabulek a grafů
-      if (state.summary) {
-        displaySummaryTable(state.summary);
-      }
-      if (state.weekly) {
-        displayWeeklyTable(state.weekly);
-        updateWeeklyChart(state.weekly);
-      }
-      if (state.heatmap) {
-        updateHeatmapChart(state.heatmap);
-      }
-      if (state.anomalies) {
-        displayAnomaliesTable(state.anomalies);
-        const countMsg = document.getElementById('anomaliesCount');
-        if (state.anomalies.length > 0) {
-          countMsg.textContent = texts.anomaliesCountText(state.anomalies.length);
-          countMsg.classList.remove('hidden');
-          document.getElementById('noAnomaliesMsg').classList.add('hidden');
-        } else {
-          countMsg.classList.add('hidden');
-          document.getElementById('noAnomaliesMsg').classList.remove('hidden');
-        }
-      }
-    }
-
-    // ---- Funkce pro čtení souboru ----
-
-    // Funkce pro čtení nahraného souboru
-    function handleFile(file) {
-      document.getElementById('errorMsg').classList.add('hidden');
-      document.getElementById('dropzoneText').textContent = localization[state.lang].loading;
-      document.getElementById('resultsSection').classList.add('hidden');
-      document.getElementById('controls').classList.add('hidden');
-
-      const reader = new FileReader();
-
-      reader.onload = function(e) {
-        const data = e.target.result;
-        let workbook;
-
-        try {
-          if (file.name.endsWith('.csv')) {
-            // Čtení CSV
-            workbook = XLSX.read(data, { type: 'string', raw: true });
-          } else {
-            // Čtení XLSX
-            workbook = XLSX.read(data, { type: 'binary' });
-          }
-
-          const firstSheetName = workbook.SheetNames[0];
-          const worksheet = workbook.Sheets[firstSheetName];
-          const json = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
-
-          if (json.length > 1) {
-            const header = json[0];
-            const rows = json.slice(1);
-
-            // Kontrola povinných sloupců
-            const requiredColumns = ['ID Stroje', 'Datum', 'Doba Chodu (h)'];
-            const columnIndices = {};
-            requiredColumns.forEach(col => {
-              const index = header.findIndex(h => h.trim() === col);
-              if (index === -1) {
-                // Zkusíme anglické názvy pro případ, že soubor je v EN
-                const enIndex = header.findIndex(h => h.trim() === COLUMN_MAP['en'][col]);
-                if (enIndex !== -1) {
-                   columnIndices[col] = enIndex;
-                } else {
-                   throw new Error(localization[state.lang].invalidFormat);
-                }
-              } else {
-                columnIndices[col] = index;
-              }
-            });
-
-            // Převedení dat do standardního formátu a čištění
-            const processedData = rows.map(row => {
-              const machineID = row[columnIndices['ID Stroje']]?.toString().trim();
-              const dateRaw = row[columnIndices['Datum']];
-              const operatingTimeRaw = row[columnIndices['Doba Chodu (h)']];
-
-              // Převedení datumu na objekt Date a doby chodu na číslo
-              let date;
-              if (typeof dateRaw === 'number') {
-                // Pravděpodobně XLSX datum, přepočet
-                date = new Date(Math.round((dateRaw - 25569) * 86400 * 1000));
-              } else {
-                // String datum
-                date = new Date(dateRaw);
-              }
-              
-              // Zajištění, že datum je platné
-              if (isNaN(date.getTime())) {
-                // Může se jednat o formát DD.MM.YYYY, zkusíme prohodit
-                const parts = dateRaw.split(/[\./-]/);
-                if (parts.length === 3) {
-                    date = new Date(`${parts[2]}-${parts[1]}-${parts[0]}`);
-                }
-                if (isNaN(date.getTime())) {
-                    console.warn("Invalid date format detected and skipped:", dateRaw);
-                    return null; // Přeskočit neplatné záznamy
-                }
-              }
-
-              // Normalizace data na GMT, aby se předešlo posunu o den
-              const normalizedDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-              
-              const operatingTime = parseFloat(operatingTimeRaw?.toString().replace(',', '.') || 0);
-
-              // Data pro heatmapu
-              const dayOfWeek = normalizedDate.getDay() === 0 ? 6 : normalizedDate.getDay() - 1; // 0=Po, 6=Ne
-              const hour = normalizedDate.getHours();
-
-              return {
-                'ID Stroje': machineID,
-                'Datum': normalizedDate.toISOString().split('T')[0], // Uložení ve formátu YYYY-MM-DD
-                'Doba Chodu (h)': isNaN(operatingTime) ? 0 : operatingTime,
-                'Week Start': getWeekStart(normalizedDate), // Pomocná funkce
-                'DayOfWeek': dayOfWeek, // 0-6 (Po-Ne)
-                'Hour': hour // 0-23
-              };
-            }).filter(item => item !== null && item['ID Stroje'] && item['Doba Chodu (h)'] >= 0);
-
-            if (processedData.length === 0) {
-              throw new Error(localization[state.lang].noData);
-            }
-
-            // Úspěšné načtení dat
-            state.data = processedData;
-            document.getElementById('dropzoneText').textContent = localization[state.lang].processing;
-            
-            // Spuštění analýzy
-            analyzeData(processedData);
-
-          } else {
-            throw new Error(localization[state.lang].noData);
-          }
-        } catch (error) {
-          console.error("Error processing file:", error);
-          displayError(error.message);
-          document.getElementById('dropzoneText').textContent = localization[state.lang].dropzoneText; // Reset text
+    /** Translates text using the global COL_MAP. */
+    const translate = (key, category = 'cs') => {
+      // Direct translation for fixed strings
+      const translations = {
+        'cs': {
+          'Analýza aktivit strojů': 'Machine Activity Analyzer',
+          'Přetáhněte sem **XLSX/CSV report** nebo klikněte pro výběr souboru.': 'Drag and drop your **XLSX/CSV report** here, or click to select a file.',
+          'Všechny směny': 'All Shifts',
+          'Všechny lokace': 'All Locations',
+          'RANNÍ (06:00-14:00)': 'MORNING (06:00-14:00)',
+          'ODPOLEDNÍ (14:00-22:00)': 'AFTERNOON (14:00-22:00)',
+          'NOČNÍ (22:00-06:00)': 'NIGHT (22:00-06:00)',
+          'Stroj (Flotilní označení)': 'Machine (Fleet Label)',
+          'Řidič': 'Driver',
+          'Skupina (Typ stroje)': 'Group (Machine Type)',
+          'Datum': 'Date',
+          'Využití (%)': 'Utilization (%)',
+          'Čas klíče (hod)': 'Key-on Time (hrs)',
+          'Provozní doba (hod)': 'Operation Time (hrs)',
+          'Volnoběh (hod)': 'Idle Time (hrs)',
+          'Jízda (hod)': 'Travel Time (hrs)',
+          'Zdvih (hod)': 'Lift Time (hrs)',
+          'Celkem aktivit (hod)': 'Total Activity Time (hrs)',
+          'Využití podle skupiny (průměr)': 'Utilization by Group (Average)',
+          'Rozklad času všech strojů (celkem)': 'Total Time Breakdown for all Machines',
+          'Hodinová heatmapa aktivit': 'Hourly Activity Heatmap',
+          'Souhrnná tabulka aktivit': 'Summary Table of Activities',
+          'Stroj/Řidič/Skupina': 'Machine/Driver/Group',
+          'Počet záznamů': 'Record Count',
+          'Týdenní přehled (celkové využití)': 'Weekly Overview (Total Utilization)',
+          'Týden': 'Week',
+          'Detekované anomálie': 'Detected Anomalies',
+          'Důvod': 'Reason',
+          'Hledat anomálie': 'Find Anomalies',
+          'Export Tabulky (CSV)': 'Export Table (CSV)',
+          'Export Anomálií (CSV)': 'Export Anomalies (CSV)',
+          'Export Týdenní (CSV)': 'Export Weekly (CSV)',
+          'Tisk / PDF': 'Print / PDF',
+          'Datum od/do': 'Date From/To',
+          'Směna': 'Shift',
+          'Sklad/Provoz': 'Warehouse/Operation',
+          'Seskupit dle': 'Group By',
+          'Metrika v tabulce': 'Table Metric',
+          'Celkem (hod)': 'Total (hrs)',
+          'hod': 'hrs'
+        },
+        'en': {
+          'Analýza aktivit strojů': 'Machine Activity Analyzer',
+          'Přetáhněte sem **XLSX/CSV report** nebo klikněte pro výběr souboru.': 'Drag and drop your **XLSX/CSV report** here, or click to select a file.',
+          'Všechny směny': 'All Shifts',
+          'Všechny lokace': 'All Locations',
+          'RANNÍ (06:00-14:00)': 'MORNING (06:00-14:00)',
+          'ODPOLEDNÍ (14:00-22:00)': 'AFTERNOON (14:00-22:00)',
+          'NOČNÍ (22:00-06:00)': 'NIGHT (22:00-06:00)',
+          'Stroj (Flotilní označení)': 'Machine (Fleet Label)',
+          'Řidič': 'Driver',
+          'Skupina (Typ stroje)': 'Group (Machine Type)',
+          'Datum': 'Date',
+          'Využití (%)': 'Utilization (%)',
+          'Čas klíče (hod)': 'Key-on Time (hrs)',
+          'Provozní doba (hod)': 'Operation Time (hrs)',
+          'Volnoběh (hod)': 'Idle Time (hrs)',
+          'Jízda (hod)': 'Travel Time (hrs)',
+          'Zdvih (hod)': 'Lift Time (hrs)',
+          'Celkem aktivit (hod)': 'Total Activity Time (hrs)',
+          'Využití podle skupiny (průměr)': 'Utilization by Group (Average)',
+          'Rozklad času všech strojů (celkem)': 'Total Time Breakdown for all Machines',
+          'Hodinová heatmapa aktivit': 'Hourly Activity Heatmap',
+          'Souhrnná tabulka aktivit': 'Summary Table of Activities',
+          'Stroj/Řidič/Skupina': 'Machine/Driver/Group',
+          'Počet záznamů': 'Record Count',
+          'Týdenní přehled (celkové využití)': 'Weekly Overview (Total Utilization)',
+          'Týden': 'Week',
+          'Detekované anomálie': 'Detected Anomalies',
+          'Důvod': 'Reason',
+          'Hledat anomálie': 'Find Anomalies',
+          'Export Tabulky (CSV)': 'Export Table (CSV)',
+          'Export Anomálií (CSV)': 'Export Anomalies (CSV)',
+          'Export Týdenní (CSV)': 'Export Weekly (CSV)',
+          'Tisk / PDF': 'Print / PDF',
+          'Datum od/do': 'Date From/To',
+          'Směna': 'Shift',
+          'Sklad/Provoz': 'Warehouse/Operation',
+          'Seskupit dle': 'Group By',
+          'Metrika v tabulce': 'Table Metric',
+          'Celkem (hod)': 'Total (hrs)',
+          'hod': 'hrs'
         }
       };
 
-      if (file.name.endsWith('.csv')) {
-        reader.readAsText(file); // Čtení jako text pro CSV
-      } else {
-        reader.readAsBinaryString(file); // Čtení jako binární pro XLSX
+      if (translations[category] && translations[category][key]) {
+        return translations[category][key];
       }
-    }
+      // Fallback for column names
+      return COL_MAP[category][key] || key;
+    };
 
-    // ---- Funkce pro analýzu dat ----
+    /** Applies all necessary UI text translations. */
+    const applyTranslations = (lang) => {
+      // Header
+      document.querySelector('header h1').innerHTML = translate('Analýza aktivit strojů') + ` <span class="text-gray-400">• ${translate('Analýza aktivit strojů', 'en')}</span>`;
+      langSwitch.textContent = lang === 'cs' ? 'English' : 'Česky';
 
-    function getWeekStart(date) {
-      const d = new Date(date);
-      // Nastavení na pondělí aktuálního týdne (ISO standard)
-      const day = d.getDay();
-      const diff = d.getDate() - day + (day === 0 ? -6 : 1); // Upraveno pro pondělí jako 1
-      const monday = new Date(d.setDate(diff));
-      return monday.toISOString().split('T')[0];
-    }
+      // Dropzone
+      dropText.innerHTML = translate('Přetáhněte sem **XLSX/CSV report** nebo klikněte pro výběr souboru.');
 
-    function analyzeData(data) {
-      // 1. Souhrnná data (Summary)
-      const summaryMap = {};
-      const weeklyMap = {}; // Pro týdenní souhrn
-      const heatmapMap = {}; // Pro heatmapu (Day/Hour)
+      // Filters
+      document.querySelector('label[for="dateFrom"]').textContent = translate('Datum od/do');
+      document.querySelector('label[for="shiftFilter"]').textContent = translate('Směna');
+      document.querySelector('option[value="all"]').textContent = translate('Všechny směny');
+      document.querySelector('option[value="RANNÍ (06:00-14:00)"]').textContent = translate('RANNÍ (06:00-14:00)');
+      document.querySelector('option[value="ODPOLEDNÍ (14:00-22:00)"]').textContent = translate('ODPOLEDNÍ (14:00-22:00)');
+      document.querySelector('option[value="NOČNÍ (22:00-06:00)"]').textContent = translate('NOČNÍ (22:00-06:00)');
+      document.querySelector('label[for="warehouseFilter"]').textContent = translate('Sklad/Provoz');
+      warehouseFilter.querySelector('option[value="all"]').textContent = translate('Všechny lokace');
+      document.querySelector('label[for="groupBy"]').textContent = translate('Seskupit dle');
+      document.querySelector('option[value="machine"]').textContent = translate('Stroj (Flotilní označení)');
+      document.querySelector('option[value="driver"]').textContent = translate('Řidič');
+      document.querySelector('option[value="group"]').textContent = translate('Skupina (Typ stroje)');
+      document.querySelector('option[value="date"]').textContent = translate('Datum');
+      document.querySelector('label[for="metricSelector"]').textContent = translate('Metrika v tabulce');
+      metricSelector.querySelector('option[value="utilization"]').textContent = translate('Využití (%)');
+      metricSelector.querySelector('option[value="keyOnTime"]').textContent = translate('Čas klíče (hod)');
+      metricSelector.querySelector('option[value="operationTime"]').textContent = translate('Provozní doba (hod)');
+      metricSelector.querySelector('option[value="idleTime"]').textContent = translate('Volnoběh (hod)');
+      metricSelector.querySelector('option[value="travelTime"]').textContent = translate('Jízda (hod)');
+      metricSelector.querySelector('option[value="liftTime"]').textContent = translate('Zdvih (hod)');
+      metricSelector.querySelector('option[value="totalTime"]').textContent = translate('Celkem aktivit (hod)');
+      anomaliesBtn.textContent = translate('Hledat anomálie');
+      document.getElementById('exportTableBtn').textContent = translate('Export Tabulky (CSV)');
+      document.getElementById('exportAnomBtn').textContent = translate('Export Anomálií (CSV)');
+      document.getElementById('exportWeeksBtn').textContent = translate('Export Týdenní (CSV)');
+      document.getElementById('printBtn').textContent = translate('Tisk / PDF');
 
-      data.forEach(row => {
-        const machineId = row['ID Stroje'];
-        const opTime = row['Doba Chodu (h)'];
-        const weekStart = row['Week Start'];
-        const dayOfWeek = row['DayOfWeek'];
-        const hour = row['Hour'];
+      // Titles
+      document.querySelector('h2.text-xl').textContent = translate('Grafické shrnutí');
+      document.getElementById('chart1Title').textContent = translate('Využití podle skupiny (průměr)');
+      document.getElementById('chart2Title').textContent = translate('Rozklad času všech strojů (celkem)');
+      document.getElementById('chart3Title').textContent = translate('Hodinová heatmapa aktivit');
+      document.querySelector('h2:nth-of-type(2)').textContent = translate('Souhrnná tabulka aktivit');
+      document.getElementById('weeklyTitle').textContent = translate('Týdenní přehled (celkové využití)');
+      anomalyTitle.textContent = translate('Detekované anomálie');
 
-        // Summary
-        if (!summaryMap[machineId]) {
-          summaryMap[machineId] = {
-            'ID Stroje': machineId,
-            'Total Operating Time (h)': 0,
-            'Dates': new Set(),
-            'Max Operating Time (h)': opTime,
-            'Min Operating Time (h)': opTime,
-            'Total Possible Days': 0 // Zatím nepoužito, pro Utilization
+      // Table Headers
+      tableHeaderKey.textContent = translate('Stroj/Řidič/Skupina');
+      updateTableHeaderMetric(); // Updates based on selected metric
+      document.querySelector('#summaryTable thead tr th:nth-child(3)').textContent = translate('Počet záznamů');
+      document.querySelector('#summaryTable thead tr th:nth-child(4)').textContent = translate('Čas klíče (hod)');
+      document.querySelector('#summaryTable thead tr th:nth-child(5)').textContent = translate('Provozní doba (hod)');
+      document.querySelector('#summaryTable thead tr th:nth-child(6)').textContent = translate('Volnoběh (hod)');
+      document.querySelector('#summaryTable thead tr th:nth-child(7)').textContent = translate('Jízda (hod)');
+      document.querySelector('#summaryTable thead tr th:nth-child(8)').textContent = translate('Zdvih (hod)');
+      document.querySelector('#summaryTable thead tr th:nth-child(9)').textContent = translate('Celkem (hod)');
+
+      document.querySelector('#weeklyTable thead tr th:nth-child(1)').textContent = translate('Týden');
+      document.querySelector('#weeklyTable thead tr th:nth-child(2)').textContent = translate('Využití (%)');
+      document.querySelector('#weeklyTable thead tr th:nth-child(3)').textContent = translate('Počet záznamů');
+
+      document.querySelector('#anomalyTable thead tr th:nth-child(1)').textContent = translate(COL_MAP['cs'].date);
+      document.querySelector('#anomalyTable thead tr th:nth-child(2)').textContent = translate(COL_MAP['cs'].machineName);
+      document.querySelector('#anomalyTable thead tr th:nth-child(3)').textContent = translate(COL_MAP['cs'].driverName);
+      document.querySelector('#anomalyTable thead tr th:nth-child(4)').textContent = translate('Důvod');
+      document.querySelector('#anomalyTable thead tr th:nth-child(5)').textContent = translate(COL_MAP['cs'].keyOnTime);
+      document.querySelector('#anomalyTable thead tr th:nth-child(6)').textContent = translate(COL_MAP['cs'].operationTime);
+
+      // Redraw data to apply language formatting (e.g., date, numbers)
+      if (state.data.length > 0) {
+        processData();
+      }
+    };
+
+
+    // =========================================================================================
+    // DATA PROCESSING & FILTERING
+    // =========================================================================================
+
+    /** Reads the uploaded XLSX/CSV file. */
+    const handleFile = (file) => {
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        const data = new Uint8Array(e.target.result);
+        const workbook = XLSX.read(data, { type: 'array', cellDates: true, cellNF: false, cellText: false });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        let json = XLSX.utils.sheet_to_json(sheet, { raw: false, dateNF: 'YYYY-MM-DD', header: 1 });
+
+        if (json.length === 0) {
+          alert(state.lang === 'cs' ? 'Soubor neobsahuje žádná data.' : 'File contains no data.');
+          return;
+        }
+
+        // Auto-detect and standardize column headers (case-insensitive, includes translations)
+        const headerRow = json.shift();
+        const headers = ['date', 'machineName', 'driverName', 'groupName', 'warehouse', 'keyOnTime', 'operationTime', 'idleTime', 'travelTime', 'liftTime'];
+        const normalizedHeaders = headers.map(h => COL_MAP['cs'][h]);
+
+        const colIndexMap = {};
+        headerRow.forEach((h, i) => {
+          const normH = h.toString().trim();
+          const targetIndex = normalizedHeaders.findIndex(nh => normH.includes(nh));
+          if (targetIndex !== -1) {
+            colIndexMap[headers[targetIndex]] = i;
+          } else if (normH.includes('Flotilní') || normH.includes('Fleet')) { // Fallback for machine name
+            colIndexMap.machineName = i;
+          } else if (normH.includes('Řidič') || normH.includes('Driver')) { // Fallback for driver name
+            colIndexMap.driverName = i;
+          } else if (normH.includes('Datum') || normH.includes('Date')) { // Fallback for date
+            colIndexMap.date = i;
+          }
+        });
+
+        // Validation
+        if (!colIndexMap.date || !colIndexMap.machineName || !colIndexMap.keyOnTime) {
+          alert(state.lang === 'cs'
+            ? 'Chybí klíčové sloupce: Datum, Flotilní označení, Čas klíče (s). Zkontrolujte hlavičku souboru.'
+            : 'Missing key columns: Date, Fleet Label, Key-on Time (s). Check your file header.'
+          );
+          return;
+        }
+
+        // Process data rows
+        state.data = json.map(row => {
+          const dateValue = row[colIndexMap.date];
+          const dateObj = new Date(dateValue);
+          const time = dateObj.getHours() + dateObj.getMinutes() / 60; // For heatmap
+          const machineName = (row[colIndexMap.machineName] || 'Neznámý Stroj').toString().trim();
+          const driverName = (row[colIndexMap.driverName] || 'Neznámý Řidič').toString().trim();
+          const groupName = (row[colIndexMap.groupName] || 'Neznámá Skupina').toString().trim();
+          const warehouse = (row[colIndexMap.warehouse] || 'Neznámá Lokace').toString().trim();
+
+          // Convert all time values to numbers (seconds), fallback to 0
+          const getKeyOnTime = () => {
+              const val = row[colIndexMap.keyOnTime];
+              // Handle Excel date/time format which can sometimes be converted to a float
+              if (typeof val === 'number') return Math.round(val * 86400); // Convert Excel days to seconds
+              if (typeof val === 'string') return parseFloat(val) || 0;
+              return parseInt(val) || 0;
           };
-        }
-        summaryMap[machineId]['Total Operating Time (h)'] += opTime;
-        summaryMap[machineId]['Dates'].add(row['Datum']); // Unikátní dny
-        if (opTime > summaryMap[machineId]['Max Operating Time (h)']) {
-          summaryMap[machineId]['Max Operating Time (h)'] = opTime;
-        }
-        if (opTime < summaryMap[machineId]['Min Operating Time (h)']) {
-          summaryMap[machineId]['Min Operating Time (h)'] = opTime;
+
+          const keyOnTime = getKeyOnTime();
+          const operationTime = parseInt(row[colIndexMap.operationTime]) || 0;
+          const idleTime = parseInt(row[colIndexMap.idleTime]) || 0;
+          const travelTime = parseInt(row[colIndexMap.travelTime]) || 0;
+          const liftTime = parseInt(row[colIndexMap.liftTime]) || 0;
+
+          const totalActivity = idleTime + travelTime + liftTime;
+          const utilization = keyOnTime > 0 ? (totalActivity / keyOnTime) * 100 : 0;
+
+          return {
+            date: dateValue,
+            dateObj,
+            time,
+            machineName,
+            driverName,
+            groupName,
+            warehouse,
+            keyOnTime,
+            operationTime,
+            idleTime,
+            travelTime,
+            liftTime,
+            totalActivity,
+            utilization,
+            shift: getShift(dateObj),
+            week: getWeekNumber(dateObj)
+          };
+        }).filter(d => !isNaN(d.dateObj) && d.keyOnTime >= 0); // Filter out invalid date/time entries
+
+        // Setup UI
+        setupFilters();
+        contentDiv.classList.remove('hidden');
+        dropZone.classList.add('hidden');
+        processData();
+      };
+
+      if (file.type === 'text/csv') {
+          // For CSV, read as text to allow encoding auto-detection (though FileReader doesn't do great)
+          // We rely on XLSX.js to handle CSV parsing with its worker threads for better encoding support
+          reader.readAsArrayBuffer(file);
+      } else {
+          // For XLSX
+          reader.readAsArrayBuffer(file);
+      }
+    };
+
+    /** Sets initial filter options and values. */
+    const setupFilters = () => {
+      const dates = state.data.map(d => d.date).filter(Boolean).sort();
+      const minDate = dates[0];
+      const maxDate = dates[dates.length - 1];
+
+      dateFromInput.value = minDate || '';
+      dateToInput.value = maxDate || '';
+      dateFromInput.min = minDate || '';
+      dateFromInput.max = maxDate || '';
+      dateToInput.min = minDate || '';
+      dateToInput.max = maxDate || '';
+
+      // Populate warehouse filter options
+      const warehouses = [...new Set(state.data.map(d => d.warehouse))].filter(w => w && w !== 'Neznámá Lokace').sort();
+      warehouseFilter.innerHTML = `<option value="all">${translate('Všechny lokace')}</option>`;
+      warehouses.forEach(w => {
+        const option = document.createElement('option');
+        option.value = w;
+        option.textContent = w;
+        warehouseFilter.appendChild(option);
+      });
+    };
+
+    /** Applies all current filters to the raw data. */
+    const filterData = () => {
+      let filtered = state.data;
+      const dateFrom = dateFromInput.value ? new Date(dateFromInput.value) : null;
+      const dateTo = dateToInput.value ? new Date(dateToInput.value) : null;
+      const shift = shiftFilter.value;
+      const warehouse = warehouseFilter.value;
+
+      filtered = filtered.filter(d => {
+        // Date filter
+        if (dateFrom && d.dateObj < dateFrom) return false;
+        if (dateTo) {
+          // Add one day to dateTo to include records from that day
+          const dateToInclusive = new Date(dateTo);
+          dateToInclusive.setDate(dateToInclusive.getDate() + 1);
+          if (d.dateObj >= dateToInclusive) return false;
         }
 
-        // Weekly (Součet za týden pro každý stroj)
-        const weeklyKey = `${machineId}_${weekStart}`;
-        if (!weeklyMap[weeklyKey]) {
-          weeklyMap[weeklyKey] = {
-            'ID Stroje': machineId,
-            'Week Start': weekStart,
-            'Operating Time (h)': 0,
-          };
-        }
-        weeklyMap[weeklyKey]['Operating Time (h)'] += opTime;
+        // Shift filter
+        if (shift !== 'all' && d.shift.includes(shift.split(' (')[0])) return false; // Match start of shift name
 
-        // Heatmap (Součet za den/hodinu pro všechny stroje)
-        const heatmapKey = `${dayOfWeek}_${hour}`;
-        if (!heatmapMap[heatmapKey]) {
-          heatmapMap[heatmapKey] = {
-            'DayOfWeek': dayOfWeek,
-            'Hour': hour,
-            'Total Op Time (h)': 0,
-            'Count': 0
-          };
-        }
-        heatmapMap[heatmapKey]['Total Op Time (h)'] += opTime;
-        heatmapMap[heatmapKey]['Count'] += 1; // Počet záznamů
+        // Warehouse filter
+        if (warehouse !== 'all' && d.warehouse !== warehouse) return false;
+
+        return true;
       });
 
-      // Dokončení Souhrnných dat
-      const summary = Object.values(summaryMap).map(item => {
-        const totalDays = item.Dates.size;
-        const totalOpTime = item['Total Operating Time (h)'];
-        const avgOpTime = totalOpTime / totalDays;
-        
-        // Předpokládáme, že max. teoretický čas je 24 hodin * počet unikátních dní
-        const totalPossibleTime = totalDays * 24; 
-        const utilization = (totalOpTime / totalPossibleTime) * 100;
+      state.filteredData = filtered;
+    };
 
-        return {
-          'ID Stroje': item['ID Stroje'],
-          'Total Operating Time (h)': parseFloat(totalOpTime.toFixed(2)),
-          'Average Operating Time (h)': parseFloat(avgOpTime.toFixed(2)),
-          'Max Operating Time (h)': parseFloat(item['Max Operating Time (h)'].toFixed(2)),
-          'Min Operating Time (h)': parseFloat(item['Min Operating Time (h)'].toFixed(2)),
-          'Total Downtime (h)': parseFloat((totalPossibleTime - totalOpTime).toFixed(2)),
-          'Utilization (%)': parseFloat(utilization.toFixed(2))
-        };
-      }).sort((a, b) => a['ID Stroje'].localeCompare(b['ID Stroje']));
+    /** Groups and aggregates the filtered data. */
+    const groupAndAggregateData = () => {
+      const key = groupBySelect.value;
+      let groupKey;
 
-      // Týdenní data (seřazená)
-      const weekly = Object.values(weeklyMap).map(item => ({
-        'ID Stroje': item['ID Stroje'],
-        'Week Start': item['Week Start'],
-        'Operating Time (h)': parseFloat(item['Operating Time (h)'].toFixed(2))
-      })).sort((a, b) => {
-        if (a['Week Start'] !== b['Week Start']) {
-          return new Date(a['Week Start']) - new Date(b['Week Start']);
+      if (key === 'machine') groupKey = 'machineName';
+      else if (key === 'driver') groupKey = 'driverName';
+      else if (key === 'group') groupKey = 'groupName';
+      else if (key === 'date') groupKey = 'date';
+      else groupKey = 'machineName'; // Default
+
+      const grouped = state.filteredData.reduce((acc, d) => {
+        const groupValue = d[groupKey];
+        if (!acc[groupValue]) {
+          acc[groupValue] = {
+            key: groupValue,
+            count: 0,
+            keyOnTime: 0,
+            operationTime: 0,
+            idleTime: 0,
+            travelTime: 0,
+            liftTime: 0,
+            totalActivity: 0,
+            utilization: 0
+          };
         }
-        return a['ID Stroje'].localeCompare(b['ID Stroje']);
-      });
 
-      // Heatmap data (průměrná hodnota pro buňku)
-      const heatmap = Object.values(heatmapMap).map(item => ({
-        'DayOfWeek': item['DayOfWeek'],
-        'Hour': item['Hour'],
-        // Průměrná doba chodu za danou hodinu a den v týdnu
-        'Value': parseFloat((item['Total Op Time (h)'] / item['Count']).toFixed(2))
+        acc[groupValue].count += 1;
+        acc[groupValue].keyOnTime += d.keyOnTime;
+        acc[groupValue].operationTime += d.operationTime;
+        acc[groupValue].idleTime += d.idleTime;
+        acc[groupValue].travelTime += d.travelTime;
+        acc[groupValue].liftTime += d.liftTime;
+        acc[groupValue].totalActivity += d.totalActivity;
+
+        return acc;
+      }, {});
+
+      // Calculate final utilization (total activity / total key-on time)
+      state.groupedData = Object.values(grouped).map(g => ({
+        ...g,
+        utilization: g.keyOnTime > 0 ? (g.totalActivity / g.keyOnTime) * 100 : 0
       }));
 
-      // 2. Detekce anomálií (Z-Score)
-      const anomalies = detectAnomalies(data);
+      // Group for weekly table (only total utilization across all filters)
+      const weeklyGrouped = state.filteredData.reduce((acc, d) => {
+        const week = d.week;
+        if (!acc[week]) {
+          acc[week] = { week, count: 0, keyOnTime: 0, totalActivity: 0, utilization: 0 };
+        }
+        acc[week].count += 1;
+        acc[week].keyOnTime += d.keyOnTime;
+        acc[week].totalActivity += d.totalActivity;
+        return acc;
+      }, {});
 
-      // Uložení do stavu a vykreslení
-      state.summary = summary;
-      state.weekly = weekly;
-      state.heatmap = heatmap;
-      state.anomalies = anomalies;
+      state.weekly = Object.values(weeklyGrouped).map(g => ({
+        ...g,
+        utilization: g.keyOnTime > 0 ? (g.totalActivity / g.keyOnTime) * 100 : 0
+      })).sort((a, b) => a.week.localeCompare(b.week));
+    };
 
-      document.getElementById('dropzoneText').textContent = localization[state.lang].dropzoneText; // Reset text
-      document.getElementById('resultsSection').classList.remove('hidden');
-      document.getElementById('controls').classList.remove('hidden');
-      
-      // Vykreslení
-      updateLocalization(); // Vyvolá vykreslení všech komponent s novými daty a aktuálním jazykem
-    }
+    /** Main function to process, filter, group, and render data. */
+    const processData = () => {
+      if (state.data.length === 0) return;
 
-    // Funkce pro detekci anomálií (jednoduchá Z-Score metoda)
-    function detectAnomalies(data, threshold = 2.5) {
-      if (!data || data.length === 0) return [];
+      filterData();
+      groupAndAggregateData();
 
-      // 1. Vypočítáme průměr a směrodatnou odchylku pro Doba Chodu (h)
-      const opTimes = data.map(d => d['Doba Chodu (h)']);
-      const mean = opTimes.reduce((sum, val) => sum + val, 0) / opTimes.length;
-      const squaredDifferences = opTimes.map(val => (val - mean) ** 2);
-      const variance = squaredDifferences.reduce((sum, val) => sum + val, 0) / opTimes.length;
-      const stdDev = Math.sqrt(variance);
+      renderSummaryTable();
+      renderWeeklyTable();
+      renderCharts();
+    };
 
-      if (stdDev === 0) return []; // Nelze detekovat anomálie, pokud jsou všechny hodnoty stejné
+    // =========================================================================================
+    // RENDERING TABLES
+    // =========================================================================================
 
-      // 2. Vypočítáme Z-Score a detekujeme anomálie
+    const updateTableHeaderMetric = () => {
+      const metric = metricSelector.value;
+      let headerText = translate('Využití (%)');
+      if (metric === 'keyOnTime') headerText = translate('Čas klíče (hod)');
+      else if (metric === 'operationTime') headerText = translate('Provozní doba (hod)');
+      else if (metric === 'idleTime') headerText = translate('Volnoběh (hod)');
+      else if (metric === 'travelTime') headerText = translate('Jízda (hod)');
+      else if (metric === 'liftTime') headerText = translate('Zdvih (hod)');
+      else if (metric === 'totalTime') headerText = translate('Celkem aktivit (hod)');
+
+      tableHeaderMetric.textContent = headerText;
+    };
+
+    /** Renders the main summary table. */
+    const renderSummaryTable = () => {
+      const metric = metricSelector.value;
+      summaryTableBody.innerHTML = '';
+
+      state.groupedData.sort((a, b) => {
+          let aValue = a.utilization;
+          let bValue = b.utilization;
+
+          if (metric === 'keyOnTime') { aValue = a.keyOnTime; bValue = b.keyOnTime; }
+          else if (metric === 'operationTime') { aValue = a.operationTime; bValue = b.operationTime; }
+          else if (metric === 'idleTime') { aValue = a.idleTime; bValue = b.idleTime; }
+          else if (metric === 'travelTime') { aValue = a.travelTime; bValue = b.travelTime; }
+          else if (metric === 'liftTime') { aValue = a.liftTime; bValue = b.liftTime; }
+          else if (metric === 'totalTime') { aValue = a.totalActivity; bValue = b.totalActivity; }
+
+          return bValue - aValue; // Descending sort
+      }).forEach(d => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50';
+
+        let metricValue = d.utilization;
+        if (metric === 'keyOnTime') metricValue = toHoursFloat(d.keyOnTime);
+        else if (metric === 'operationTime') metricValue = toHoursFloat(d.operationTime);
+        else if (metric === 'idleTime') metricValue = toHoursFloat(d.idleTime);
+        else if (metric === 'travelTime') metricValue = toHoursFloat(d.travelTime);
+        else if (metric === 'liftTime') metricValue = toHoursFloat(d.liftTime);
+        else if (metric === 'totalTime') metricValue = toHoursFloat(d.totalActivity);
+
+        let metricDisplay = metric === 'utilization' ? toPercent(metricValue) : metricValue.toFixed(2);
+
+        const cells = [
+          d.key,
+          metricDisplay,
+          d.count.toLocaleString(state.lang === 'cs' ? 'cs-CZ' : 'en-US'),
+          toHours(d.keyOnTime),
+          toHours(d.operationTime),
+          toHours(d.idleTime),
+          toHours(d.travelTime),
+          toHours(d.liftTime),
+          toHours(d.totalActivity)
+        ];
+
+        cells.forEach(cellText => {
+          const td = document.createElement('td');
+          td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+          td.textContent = cellText;
+          tr.appendChild(td);
+        });
+        summaryTableBody.appendChild(tr);
+      });
+    };
+
+    /** Renders the weekly summary table. */
+    const renderWeeklyTable = () => {
+      weeklyTableBody.innerHTML = '';
+
+      state.weekly.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50';
+        const cells = [
+          d.week,
+          toPercent(d.utilization),
+          d.count.toLocaleString(state.lang === 'cs' ? 'cs-CZ' : 'en-US')
+        ];
+
+        cells.forEach(cellText => {
+          const td = document.createElement('td');
+          td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+          td.textContent = cellText;
+          tr.appendChild(td);
+        });
+        weeklyTableBody.appendChild(tr);
+      });
+    };
+
+    /** Renders the anomaly table. */
+    const renderAnomalyTable = () => {
+      anomalyTableBody.innerHTML = '';
+      if (state.anomalies.length > 0) {
+          anomalyTitle.classList.remove('hidden');
+          anomalyTableWrap.classList.remove('hidden');
+      } else {
+          anomalyTitle.classList.add('hidden');
+          anomalyTableWrap.classList.add('hidden');
+          return;
+      }
+
+      state.anomalies.forEach(d => {
+        const tr = document.createElement('tr');
+        tr.className = 'hover:bg-gray-50 bg-red-50'; // Highlight anomalies
+
+        const cells = [
+          formatDate(d.date, state.lang),
+          d.machineName,
+          d.driverName,
+          d.reason,
+          d.keyOnTime.toLocaleString(state.lang === 'cs' ? 'cs-CZ' : 'en-US'),
+          d.operationTime.toLocaleString(state.lang === 'cs' ? 'cs-CZ' : 'en-US')
+        ];
+
+        cells.forEach(cellText => {
+          const td = document.createElement('td');
+          td.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-900';
+          td.textContent = cellText;
+          tr.appendChild(td);
+        });
+        anomalyTableBody.appendChild(tr);
+      });
+    };
+
+    // =========================================================================================
+    // RENDERING CHARTS
+    // =========================================================================================
+
+    /** Generates a pastel color based on a string seed. */
+    const stringToColor = (str) => {
+        let hash = 0;
+        for (let i = 0; i < str.length; i++) {
+            hash = str.charCodeAt(i) + ((hash << 5) - hash);
+        }
+        let color = 'hsl(' + (hash % 360) + ', 60%, 80%)';
+        return color;
+    };
+
+    /** Destroys and redraws all charts. */
+    const renderCharts = () => {
+      // 1. Utilization Chart
+      const groupedByGroup = state.groupedData.filter(d => groupBySelect.value === 'group' || d.groupName).reduce((acc, d) => {
+        const groupKey = d.groupName || (state.lang === 'cs' ? 'Neznámá Skupina' : 'Unknown Group');
+        if (!acc[groupKey]) acc[groupKey] = [];
+        acc[groupKey].push(d.utilization);
+        return acc;
+      }, {});
+
+      const avgUtilizationData = Object.keys(groupedByGroup).map(group => ({
+        label: group,
+        utilization: groupedByGroup[group].reduce((sum, u) => sum + u, 0) / groupedByGroup[group].length
+      })).sort((a, b) => b.utilization - a.utilization);
+
+      renderChart('utilizationChart', 'bar', {
+        labels: avgUtilizationData.map(d => d.label),
+        datasets: [{
+          label: translate('Využití (%)'),
+          data: avgUtilizationData.map(d => d.utilization),
+          backgroundColor: avgUtilizationData.map(d => stringToColor(d.label)),
+          borderColor: avgUtilizationData.map(d => stringToColor(d.label).replace('80%', '50%')),
+          borderWidth: 1
+        }]
+      }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: { legend: { display: false } },
+        scales: {
+          y: { beginAtZero: true, max: 100, title: { display: true, text: translate('Využití (%)') } },
+          x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 45 } }
+        }
+      });
+
+
+      // 2. Time Breakdown Chart (Donut)
+      const totalKeyOn = state.filteredData.reduce((sum, d) => sum + d.keyOnTime, 0);
+      const totalOperation = state.filteredData.reduce((sum, d) => sum + d.operationTime, 0);
+      const totalIdle = state.filteredData.reduce((sum, d) => sum + d.idleTime, 0);
+      const totalTravel = state.filteredData.reduce((sum, d) => sum + d.travelTime, 0);
+      const totalLift = state.filteredData.reduce((sum, d) => sum + d.liftTime, 0);
+
+      // Remaining time is Key-on - Total Activity (Idle + Travel + Lift)
+      const totalActivity = totalIdle + totalTravel + totalLift;
+      const remainingKeyOn = Math.max(0, totalKeyOn - totalActivity);
+      const totalTime = totalKeyOn + totalOperation; // Use Operation + KeyOn as base for a full picture (if Operation is ever > KeyOn)
+
+      renderChart('timeBreakdownChart', 'doughnut', {
+        labels: [
+          translate('Provozní doba (hod)'),
+          translate('Volnoběh (hod)'),
+          translate('Jízda (hod)'),
+          translate('Zdvih (hod)'),
+          translate('Čas klíče bez aktivity (hod)')
+        ],
+        datasets: [{
+          data: [
+            toHoursFloat(totalOperation),
+            toHoursFloat(totalIdle),
+            toHoursFloat(totalTravel),
+            toHoursFloat(totalLift),
+            toHoursFloat(remainingKeyOn)
+          ],
+          backgroundColor: ['#4ade80', '#facc15', '#fb923c', '#e11d48', '#94a3b8'], // green, yellow, orange, red, blue-gray
+          hoverOffset: 4
+        }]
+      }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { position: 'right' },
+          tooltip: {
+            callbacks: {
+              label: (tooltipItem) => {
+                const total = tooltipItem.dataset.data.reduce((sum, val) => sum + val, 0);
+                const value = tooltipItem.raw;
+                const percent = total > 0 ? (value / total * 100).toFixed(1) : 0;
+                return `${tooltipItem.label}: ${value.toFixed(2)} ${translate('hod')} (${percent}%)`;
+              }
+            }
+          }
+        }
+      });
+
+      // 3. Hourly Heatmap
+      const heatmapData = new Array(24).fill(0).map(() => new Array(7).fill(0)); // 24 hours, 7 days (0=Sun, 6=Sat)
+
+      state.filteredData.forEach(d => {
+        const hour = d.dateObj.getHours();
+        const day = d.dateObj.getDay(); // 0=Sunday, 1=Monday...
+        heatmapData[hour][day] += d.totalActivity; // Sum of activity time
+      });
+
+      const maxActivity = heatmapData.flat().reduce((max, val) => Math.max(max, val), 0);
+      const heatmapDataset = [];
+
+      for (let hour = 0; hour < 24; hour++) {
+        for (let day = 0; day < 7; day++) {
+          const totalActivitySec = heatmapData[hour][day];
+          const totalActivityHours = toHoursFloat(totalActivitySec);
+          heatmapDataset.push({
+            x: day,
+            y: hour,
+            v: totalActivityHours,
+            util: maxActivity > 0 ? (totalActivitySec / maxActivity) * 100 : 0 // Relative utilization for color
+          });
+        }
+      }
+
+      const daysOfWeek = [
+        state.lang === 'cs' ? 'Ne' : 'Sun',
+        state.lang === 'cs' ? 'Po' : 'Mon',
+        state.lang === 'cs' ? 'Út' : 'Tue',
+        state.lang === 'cs' ? 'St' : 'Wed',
+        state.lang === 'cs' ? 'Čt' : 'Thu',
+        state.lang === 'cs' ? 'Pá' : 'Fri',
+        state.lang === 'cs' ? 'So' : 'Sat',
+      ];
+      const hoursOfDay = Array.from({ length: 24 }, (_, i) => `${i}:00`);
+
+
+      renderChart('heatmapChart', 'matrix', {
+        datasets: [{
+          label: translate('Celková aktivita (hod)'),
+          data: heatmapDataset,
+          backgroundColor: (context) => {
+            if (!context.dataset.data[context.dataIndex]) return 'rgb(243 244 246)'; // gray-100 for zero
+            const value = context.dataset.data[context.dataIndex].util;
+            const alpha = value / 100;
+            // Use a deep blue for activity
+            return `rgba(37, 99, 235, ${alpha * 0.8 + 0.2})`; // dark blue
+          },
+          borderColor: 'white',
+          borderWidth: 1,
+          hoverBackgroundColor: 'rgba(251, 191, 36, 0.8)', // yellow
+          width: ({ chart }) => (chart.chartArea || {}).width / 7 - 1,
+          height: ({ chart }) => (chart.chartArea || {}).height / 24 - 1
+        }]
+      }, {
+        responsive: true,
+        maintainAspectRatio: false,
+        plugins: {
+          legend: { display: false },
+          tooltip: {
+            callbacks: {
+              title: (tooltipItems) => {
+                const item = tooltipItems[0].dataset.data[tooltipItems[0].dataIndex];
+                return `${daysOfWeek[item.x]}, ${hoursOfDay[item.y]} - ${hoursOfDay[(item.y + 1) % 24]}`;
+              },
+              label: (tooltipItem) => {
+                const item = tooltipItem.dataset.data[tooltipItem.dataIndex];
+                return `${translate('Celkem (hod)')}: ${item.v.toFixed(2)}`;
+              }
+            }
+          }
+        },
+        scales: {
+          x: {
+            type: 'category',
+            labels: daysOfWeek,
+            grid: { display: false },
+            ticks: { padding: 10 }
+          },
+          y: {
+            type: 'category',
+            labels: hoursOfDay.reverse(),
+            offset: true,
+            grid: { display: false },
+            ticks: { padding: 5 }
+          }
+        }
+      });
+    };
+
+    /** Initializes or updates a Chart.js instance. */
+    const renderChart = (canvasId, type, data, options) => {
+      const canvas = document.getElementById(canvasId);
+      if (!canvas) return;
+
+      if (state.chartInstances[canvasId]) {
+        state.chartInstances[canvasId].destroy();
+      }
+
+      state.chartInstances[canvasId] = new Chart(canvas, {
+        type: type,
+        data: data,
+        options: options
+      });
+    };
+
+
+    // =========================================================================================
+    // ANOMALY DETECTION
+    // =========================================================================================
+
+    /** Detects simple anomalies based on predefined rules. */
+    const detectAnomalies = () => {
+      state.anomalies = [];
       const anomalies = [];
-      data.forEach((row, index) => {
-        const opTime = row['Doba Chodu (h)'];
-        const zScore = (opTime - mean) / stdDev;
-        const absZScore = Math.abs(zScore);
 
-        if (absZScore > threshold) {
-          const type = zScore > 0 ? 'Přehnané Využití' : 'Nízké Využití';
-          const typeEn = zScore > 0 ? 'Over-Utilization' : 'Under-Utilization';
+      state.filteredData.forEach(d => {
+        let reason = null;
 
+        // Rule 1: High Key-on but low Operation (Engine running but not doing much)
+        // Key-on > 1 hour (3600s) AND Operation < 10% of Key-on
+        if (d.keyOnTime > 3600 && d.operationTime < d.keyOnTime * 0.1) {
+          reason = state.lang === 'cs' ? 'Vysoký čas klíče, nízký provoz' : 'High key-on time, low operation';
+        }
+
+        // Rule 2: Operation time is much higher than Key-on time (Suggests wrong logging/measurement)
+        // Operation > Key-on * 1.5
+        if (d.operationTime > d.keyOnTime * 1.5) {
+          reason = state.lang === 'cs' ? 'Provozní doba je výrazně vyšší než čas klíče' : 'Operation time significantly higher than key-on time';
+        }
+
+        // Rule 3: Very low Key-on but high Idle/Travel/Lift (Activity without Key-on) - less than 5 min Key-on (300s)
+        if (d.keyOnTime < 300 && d.totalActivity > 600) {
+            reason = state.lang === 'cs' ? 'Vysoká aktivita při nízkém čase klíče' : 'High activity with low key-on time';
+        }
+
+        if (reason) {
           anomalies.push({
-            'ID Stroje': row['ID Stroje'],
-            'Datum': row['Datum'],
-            'Operating Time (h)': opTime,
-            'Anomaly Score': parseFloat(absZScore.toFixed(2)),
-            'Type': state.lang === 'cs' ? type : typeEn
+            date: d.date,
+            machineName: d.machineName,
+            driverName: d.driverName,
+            keyOnTime: d.keyOnTime,
+            operationTime: d.operationTime,
+            reason: reason,
           });
         }
       });
 
-      return anomalies.sort((a, b) => b['Anomaly Score'] - a['Anomaly Score']);
-    }
+      state.anomalies = anomalies;
+      renderAnomalyTable();
 
+      alert(state.lang === 'cs' ? `Nalezeno ${anomalies.length} anomálií v zobrazených datech.` : `Found ${anomalies.length} anomalies in the displayed data.`);
+    };
 
-    // ---- Funkce pro vykreslení tabulek ----
+    // =========================================================================================
+    // CSV EXPORT LOGIC
+    // =========================================================================================
 
-    function createTable(data, elementId) {
-      const texts = localization[state.lang];
-      const container = document.getElementById(elementId);
-      container.innerHTML = ''; // Vyčištění
+    /** Converts the summary table data to a CSV string. */
+    const toCsvSummary = (data) => {
+      if (data.length === 0) return null;
 
-      if (!data || data.length === 0) {
-        container.innerHTML = `<p class="p-4 text-gray-500">${elementId === 'anomaliesTable' ? texts.noAnomaliesMsg : texts.noData}</p>`;
-        return;
-      }
+      const lang = state.lang;
+      const header = [
+        translate('Stroj/Řidič/Skupina'),
+        translate('Využití (%)'),
+        translate('Počet záznamů'),
+        translate('Čas klíče (hod)'),
+        translate('Provozní doba (hod)'),
+        translate('Volnoběh (hod)'),
+        translate('Jízda (hod)'),
+        translate('Zdvih (hod)'),
+        translate('Celkem (hod)')
+      ].join(';');
 
-      const keys = Object.keys(data[0]).filter(k => k !== 'Dates'); // Sloupce, které chceme zobrazit
-      
-      const table = document.createElement('table');
-      table.className = 'min-w-full divide-y divide-gray-200';
-      
-      // Header
-      const thead = table.createTHead();
-      const headerRow = thead.insertRow();
-      keys.forEach(key => {
-        const th = document.createElement('th');
-        // Překlad hlavičky
-        th.textContent = COLUMN_MAP[state.lang][key] || key; 
-        th.className = 'px-6 py-3 text-xs font-medium text-gray-500 uppercase tracking-wider text-left bg-gray-50';
-        headerRow.appendChild(th);
-      });
-      
-      // Body
-      const tbody = table.createTBody();
-      tbody.className = 'bg-white divide-y divide-gray-200';
-      
-      data.forEach(item => {
-        const row = tbody.insertRow();
-        keys.forEach(key => {
-          const cell = row.insertCell();
-          cell.className = 'px-6 py-4 whitespace-nowrap text-sm text-gray-700';
-          let value = item[key];
+      const rows = data.map(d => [
+        `"${d.key.replace(/"/g, '""')}"`, // Quote keys to handle commas/semicolons
+        toPercent(d.utilization).replace('.', ','),
+        d.count.toString(),
+        toHours(d.keyOnTime).replace('.', ','),
+        toHours(d.operationTime).replace('.', ','),
+        toHours(d.idleTime).replace('.', ','),
+        toHours(d.travelTime).replace('.', ','),
+        toHours(d.liftTime).replace('.', ','),
+        toHours(d.totalActivity).replace('.', ',')
+      ].join(';'));
 
-          // Formátování pro procenta
-          if (key === 'Utilization (%)') {
-            value = `${value}%`;
-          }
+      return header + '\n' + rows.join('\n');
+    };
 
-          // Barvení anomálií
-          if (elementId === 'anomaliesTable' && key === 'Type') {
-            const colorClass = value.includes(state.lang === 'cs' ? 'Nízké' : 'Under') ? 'text-blue-600' : 'text-red-600';
-            cell.innerHTML = `<span class="font-semibold ${colorClass}">${value}</span>`;
-          } else if (elementId === 'anomaliesTable' && key === 'Operating Time (h)') {
-             cell.innerHTML = `<span class="font-bold text-gray-900">${value}</span>`;
-          } else {
-             cell.textContent = value;
-          }
-        });
-      });
-      
-      container.appendChild(table);
-    }
-    
-    function displaySummaryTable(data) {
-      createTable(data, 'summaryTable');
-    }
+    /** Converts the anomaly table data to a CSV string. */
+    const toCsvAnomalies = (data) => {
+      if (data.length === 0) return null;
 
-    function displayWeeklyTable(data) {
-      createTable(data, 'weeklyTable');
-    }
+      const header = [
+        translate(COL_MAP['cs'].date),
+        translate(COL_MAP['cs'].machineName),
+        translate(COL_MAP['cs'].driverName),
+        translate('Důvod'),
+        translate(COL_MAP['cs'].keyOnTime),
+        translate(COL_MAP['cs'].operationTime)
+      ].join(';');
 
-    function displayAnomaliesTable(data) {
-      const countMsg = document.getElementById('anomaliesCount');
-      if (data.length > 0) {
-        countMsg.textContent = localization[state.lang].anomaliesCountText(data.length);
-        countMsg.classList.remove('hidden');
-        document.getElementById('noAnomaliesMsg').classList.add('hidden');
-      } else {
-        countMsg.classList.add('hidden');
-        document.getElementById('noAnomaliesMsg').classList.remove('hidden');
-      }
-      
-      createTable(data, 'anomaliesTable');
-    }
+      const rows = data.map(d => [
+        formatDate(d.date, state.lang),
+        `"${d.machineName.replace(/"/g, '""')}"`,
+        `"${d.driverName.replace(/"/g, '""')}"`,
+        `"${d.reason.replace(/"/g, '""')}"`,
+        d.keyOnTime.toString(),
+        d.operationTime.toString()
+      ].join(';'));
 
+      return header + '\n' + rows.join('\n');
+    };
 
-    // ---- Funkce pro vykreslení grafů (Chart.js) ----
+    /** Converts the weekly table data to a CSV string. */
+    const toCsvWeeks = (data) => {
+        if (data.length === 0) return null;
 
-    function renderWeeklyChart(data) {
-      const texts = localization[state.lang];
-      const ctx = document.getElementById('weeklyChart').getContext('2d');
-      
-      // Získání unikátních strojů a týdnů
-      const machineIds = [...new Set(data.map(d => d['ID Stroje']))].sort();
-      const weekStarts = [...new Set(data.map(d => d['Week Start']))].sort();
+        const header = [
+          translate('Týden'),
+          translate('Využití (%)'),
+          translate('Počet záznamů')
+        ].join(';');
 
-      const datasets = machineIds.map((machineId, index) => {
-        const machineData = weekStarts.map(week => {
-          const item = data.find(d => d['ID Stroje'] === machineId && d['Week Start'] === week);
-          return item ? item['Operating Time (h)'] : 0;
-        });
+        const rows = data.map(d => [
+          d.week,
+          toPercent(d.utilization).replace('.', ','),
+          d.count.toString()
+        ].join(';'));
 
-        // Náhodná barva pro každý stroj
-        const hue = (index * 137.5) % 360; // Zlatý řez pro rozložení barev
-        const color = `hsl(${hue}, 70%, 50%)`;
+        return header + '\n' + rows.join('\n');
+    };
 
-        return {
-          label: machineId,
-          data: machineData,
-          borderColor: color,
-          backgroundColor: color + '40', // Lehce průhledná
-          tension: 0.3,
-          fill: false,
-          pointRadius: 3
-        };
-      });
+    // =========================================================================================
+    // EVENT LISTENERS
+    // =========================================================================================
 
-      if (state.charts.weekly) {
-        state.charts.weekly.destroy();
-      }
+    // File Dropzone Handlers
+    dropZone.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      dropZone.classList.add('dragover');
+    });
 
-      state.charts.weekly = new Chart(ctx, {
-        type: 'line',
-        data: {
-          labels: weekStarts,
-          datasets: datasets
-        },
-        options: {
-          responsive: true,
-          maintainAspectRatio: false,
-          plugins: {
-            title: {
-              display: true,
-              text: texts.weeklyChartTitle,
-              font: { size: 16 }
-            },
-            tooltip: {
-                callbacks: {
-                    label: function(context) {
-                        return `${context.dataset.label}: ${context.parsed.y} ${state.lang === 'cs' ? 'h' : 'h'}`;
-                    }
-                }
-            }
-          },
-          scales: {
-            x: {
-              title: {
-                display: true,
-                text: COLUMN_MAP[state.lang]['Week Start']
-              }
-            },
-            y: {
-              title: {
-                display: true,
-                text: COLUMN_MAP[state.lang]['Operating Time (h)']
-              },
-              beginAtZero: true
-            }
-          }
-        }
-      });
-    }
-    
-    function updateWeeklyChart(data) {
-        if (state.charts.weekly) {
-            state.charts.weekly.destroy();
-        }
-        renderWeeklyChart(data);
-    }
-    
-    function renderHeatmapChart(data) {
-        const texts = localization[state.lang];
-        const ctx = document.getElementById('heatmapChart').getContext('2d');
-        
-        // Data pro Chart.js Matrix (Heatmap)
-        // Očekává se pole { x: hour, y: dayOfWeek, v: value }
-        const chartData = data.map(d => ({
-            x: d['Hour'],
-            y: d['DayOfWeek'],
-            v: d['Value']
-        }));
-        
-        // Získání rozsahu hodnot pro barvy
-        const values = chartData.map(d => d.v);
-        const maxVal = Math.max(...values);
-        
-        if (state.charts.heatmap) {
-            state.charts.heatmap.destroy();
-        }
+    dropZone.addEventListener('dragleave', () => {
+      dropZone.classList.remove('dragover');
+    });
 
-        state.charts.heatmap = new Chart(ctx, {
-            type: 'matrix',
-            data: {
-                datasets: [{
-                    label: COLUMN_MAP[state.lang]['Operating Time (h)'],
-                    data: chartData,
-                    backgroundColor: function(context) {
-                        const value = context.dataset.data[context.dataIndex].v;
-                        const ratio = value / maxVal;
-                        // Barva od světle modré po tmavě modrou podle hodnoty (0.0 až 1.0)
-                        const hue = 240; 
-                        const saturation = 80; 
-                        const lightness = 95 - (ratio * 40); // 95 (světlá) až 55 (tmavá)
-                        return `hsl(${hue}, ${saturation}%, ${lightness}%)`;
-                    },
-                    borderColor: 'rgba(0,0,0,0.1)',
-                    borderWidth: 1,
-                    width: function(context) {
-                        const a = context.chart.canvas.width;
-                        const b = context.chart.canvas.height;
-                        return Math.min(a, b) / 24 - 1; // Šířka buňky = (šířka/24) - okraj
-                    },
-                    height: function(context) {
-                        const a = context.chart.canvas.width;
-                        const b = context.chart.canvas.height;
-                        return Math.min(a, b) / 7 - 1; // Výška buňky = (výška/7) - okraj
-                    },
-                    hoverBackgroundColor: 'yellow',
-                    tooltipLabel: function(context) {
-                        const d = context.dataset.data[context.dataIndex];
-                        return `${texts.days[d.y]} ${d.x}:00 - ${d.v} h`;
-                    }
-                }]
-            },
-            options: {
-                responsive: true,
-                maintainAspectRatio: false,
-                plugins: {
-                    title: {
-                        display: true,
-                        text: texts.heatmapTitle,
-                        font: { size: 16 }
-                    },
-                    legend: {
-                        display: false
-                    },
-                    tooltip: {
-                        callbacks: {
-                            title: function() { return ''; },
-                            label: function(context) {
-                                const d = context.dataset.data[context.dataIndex];
-                                return `${texts.days[d.y]} ${d.x}:00: ${d.v} ${state.lang === 'cs' ? 'h' : 'h'}`;
-                            }
-                        }
-                    }
-                },
-                scales: {
-                    x: {
-                        type: 'linear',
-                        offset: true,
-                        grid: { display: false },
-                        ticks: {
-                            stepSize: 1,
-                            callback: function(value) {
-                                return value % 2 === 0 ? value : ''; // Zobrazit každou druhou hodinu
-                            }
-                        },
-                        title: {
-                            display: true,
-                            text: COLUMN_MAP[state.lang]['Hour']
-                        }
-                    },
-                    y: {
-                        type: 'category',
-                        labels: texts.days,
-                        offset: true,
-                        grid: { display: false },
-                        title: {
-                            display: true,
-                            text: COLUMN_MAP[state.lang]['DayOfWeek']
-                        }
-                    }
-                }
-            }
-        });
-    }
-    
-    function updateHeatmapChart(data) {
-        if (state.charts.heatmap) {
-            state.charts.heatmap.destroy();
-        }
-        renderHeatmapChart(data);
-    }
+    dropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      dropZone.classList.remove('dragover');
+      const file = e.dataTransfer.files[0];
+      if (file) handleFile(file);
+    });
 
+    dropZone.addEventListener('click', () => {
+      fileInput.click();
+    });
 
-    // ---- Funkce pro export do CSV ----
+    fileInput.addEventListener('change', (e) => {
+      const file = e.target.files[0];
+      if (file) handleFile(file);
+    });
 
-    // Převod pole objektů na CSV řetězec
-    function arrayToCsv(data, columnMapping) {
-      if (!data || data.length === 0) return null;
+    // Filter Handlers
+    dateFromInput.addEventListener('change', processData);
+    dateToInput.addEventListener('change', processData);
+    shiftFilter.addEventListener('change', processData);
+    warehouseFilter.addEventListener('change', processData);
+    groupBySelect.addEventListener('change', processData);
+    metricSelector.addEventListener('change', () => {
+        updateTableHeaderMetric();
+        renderSummaryTable();
+    });
 
-      // Získání hlaviček a jejich překlad
-      const keys = Object.keys(data[0]).filter(k => k !== 'Dates');
-      const header = keys.map(key => columnMapping[key] || key).join(';');
-      
-      // Řádky
-      const rows = data.map(item => 
-        keys.map(key => {
-          let value = item[key];
-          if (typeof value === 'string' && value.includes(';')) {
-            value = `"${value}"`; // Ošetření středníků
-          }
-          return value;
-        }).join(';')
-      );
+    // Language Switch
+    langSwitch.addEventListener('click', () => {
+      state.lang = state.lang === 'cs' ? 'en' : 'cs';
+      applyTranslations(state.lang);
+    });
 
-      return [header, ...rows].join('\n');
-    }
+    // Anomaly Button Handler
+    anomaliesBtn.addEventListener('click', detectAnomalies);
 
-    // Export pro Souhrn
-    function toCsvSummary(data) {
-      const mapping = COLUMN_MAP[state.lang];
-      return arrayToCsv(data, mapping);
-    }
+    // Export Button Handlers
+    document.getElementById("exportTableBtn").addEventListener("click", () => {
+      const csv = toCsvSummary(state.groupedData||[]);
+      if(!csv){ alert(state.lang==='cs' ? 'Žádná data k exportu' : 'No data to export'); return; }
+      const blob = new Blob(["\ufeff" + csv], {type: "text/csv;charset=utf-8;"}); // Add BOM for UTF-8 in Excel
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = "machine_activity_summary.csv";
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
 
-    // Export pro Týdenní data
-    function toCsvWeeks(data) {
-      const mapping = COLUMN_MAP[state.lang];
-      return arrayToCsv(data, mapping);
-    }
-
-    // Export pro Anomálie
-    function toCsvAnomalies(data) {
-      // Anomálie mají jinou sadu klíčů a jejich mapování
-      const mapping = {
-        'ID Stroje': COLUMN_MAP[state.lang]['Machine ID'],
-        'Datum': COLUMN_MAP[state.lang]['Date'],
-        'Operating Time (h)': COLUMN_MAP[state.lang]['Operating Time (h)'],
-        'Anomaly Score': COLUMN_MAP[state.lang]['Anomaly Score'],
-        'Type': COLUMN_MAP[state.lang]['Type']
-      };
-      
-      // Musíme předělat data, aby obsahovala pouze potřebné klíče
-      const formattedData = data.map(d => ({
-        'ID Stroje': d['ID Stroje'],
-        'Datum': d['Datum'],
-        'Operating Time (h)': d['Operating Time (h)'],
-        'Anomaly Score': d['Anomaly Score'],
-        'Type': d['Type']
-      }));
-      
-      return arrayToCsv(formattedData, mapping);
-    }
-
-
-    // ---- Inicializace a Listenery ----
-
-    document.addEventListener('DOMContentLoaded', () => {
-      const dropzone = document.getElementById('dropzone');
-      const fileInput = document.getElementById('fileInput');
-      const langSwitch = document.getElementById('langSwitch');
-
-      // 1. Změna jazyka
-      langSwitch.value = state.lang; // Nastavení výchozího jazyka
-      langSwitch.addEventListener('change', (e) => {
-        state.lang = e.target.value;
-        updateLocalization();
-      });
-
-      // 2. Drag and Drop logiky
-      dropzone.addEventListener('click', () => fileInput.click());
-      fileInput.addEventListener('change', (e) => {
-        if (e.target.files.length) {
-          handleFile(e.target.files[0]);
-        }
-      });
-
-      // Vizuální efekty pro Drag and Drop
-      dropzone.addEventListener('dragover', (e) => {
-        e.preventDefault();
-        dropzone.classList.add('dragover');
-      });
-
-      dropzone.addEventListener('dragleave', () => {
-        dropzone.classList.remove('dragover');
-      });
-
-      dropzone.addEventListener('drop', (e) => {
-        e.preventDefault();
-        dropzone.classList.remove('dragover');
-        if (e.dataTransfer.files.length) {
-          handleFile(e.dataTransfer.files[0]);
-        }
-      });
-
-      // 3. Exportní tlačítka
-      
-      // Export Souhrnu
-      document.getElementById("exportSummBtn").addEventListener("click", ()=>{
-        const texts = localization[state.lang];
-        const csv = toCsvSummary(state.summary||[]);
-        if(!csv){ alert(texts.noData); return; }
-        const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
+    const exportAnomBtn = document.getElementById("exportAnomBtn");
+    if(exportAnomBtn){
+      exportAnomBtn.addEventListener("click", ()=>{
+        const csv = toCsvAnomalies(state.anomalies||[]);
+        if(!csv){ alert(state.lang==='cs' ? 'Žádné anomálie' : 'No anomalies'); return; }
+        const blob = new Blob(["\ufeff" + csv], {type: "text/csv;charset=utf-8;"});
         const link = document.createElement("a");
         link.href = URL.createObjectURL(blob);
-        link.download = "machine_activity_summary.csv";
+        link.download = "machine_activity_anomalies.csv";
         link.click();
         URL.revokeObjectURL(link.href);
       });
+    }
 
-      // Export Anomálií
-      const exportAnomBtn = document.getElementById("exportAnomBtn");
-      if(exportAnomBtn){
-        exportAnomBtn.addEventListener("click", ()=>{
-          const texts = localization[state.lang];
-          const csv = toCsvAnomalies(state.anomalies||[]);
-          if(!csv){ 
-            alert(texts.noAnomaliesAlert); 
-            return; 
-          }
-          const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(blob);
-          link.download = "machine_activity_anomalies.csv";
-          link.click();
-          URL.revokeObjectURL(link.href);
-        });
-      }
+    // Print / PDF export button handler: triggers browser print dialog
+    const printBtn = document.getElementById('printBtn');
+    if(printBtn){
+      printBtn.addEventListener('click', () => {
+        window.print();
+      });
+    }
 
-      // Export Týdenních dat
-      const exportWeeksBtn = document.getElementById("exportWeeksBtn");
-      if(exportWeeksBtn){
-        exportWeeksBtn.addEventListener("click", () => {
-          const texts = localization[state.lang];
-          const csv = toCsvWeeks(state.weekly||[]);
-          if(!csv){ 
-            alert(texts.noWeeklyAlert); 
-            return; 
-          }
-          const blob = new Blob([csv], {type: "text/csv;charset=utf-8;"});
-          const link = document.createElement("a");
-          link.href = URL.createObjectURL(blob);
-          link.download = "machine_activity_weekly.csv";
-          link.click();
-          URL.revokeObjectURL(link.href);
-        });
-      }
+    const exportWeeksBtn = document.getElementById("exportWeeksBtn");
+    if(exportWeeksBtn){
+      exportWeeksBtn.addEventListener("click", () => {
+        const csv = toCsvWeeks(state.weekly||[]);
+        if(!csv){ alert(state.lang==='cs' ? 'Žádná týdenní data' : 'No weekly data'); return; }
+        const blob = new Blob(["\ufeff" + csv], {type: "text/csv;charset=utf-8;"});
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "machine_activity_weekly.csv";
+        link.click();
+        URL.revokeObjectURL(link.href);
+      });
+    }
 
-      // Tisk / Export PDF
-      const printBtn = document.getElementById('printBtn');
-      if(printBtn){
-        printBtn.addEventListener('click', () => {
-          window.print();
-        });
-      }
-
-      // Spuštění inicializace lokalizace při startu pro zajištění správných textů
-      updateLocalization();
+    // Initial setup: ensure Czech is the starting language
+    document.addEventListener('DOMContentLoaded', () => {
+        applyTranslations('cs');
     });
 
   </script>
