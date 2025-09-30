@@ -137,12 +137,7 @@
 
       <div class="rounded-2xl bg-white p-6 shadow">
         <h2 class="font-semibold mb-2" data-i18n="legend_title">Legenda / Sloupce</h2>
-        <ul class="list-disc pl-5 text-sm leading-6">
-          <li><b>Čas klíče</b> – celkový čas se zapnutým klíčkem (h)</li>
-          <li><b>Provozní doba</b> – aktivní práce stroje (h)</li>
-          <li><b>Využití</b> – Provozní doba / Čas klíče</li>
-          <li><b>Jízda</b>, <b>Zdvih</b>, <b>Se zátěží</b>, <b>Volnoběh</b> – hodinový rozklad</li>
-        </ul>
+        <ul id="legendList" class="list-disc pl-5 text-sm leading-6"></ul>
       </div>
     </section>
 
@@ -210,7 +205,7 @@
 
     <!-- Peak hours section -->
     <section class="rounded-2xl bg-white p-6 shadow mb-6">
-      <h2 class="font-semibold mb-4" data-i18n="peak_title">Špičky využití</h2>
+      <div class="flex items-center justify-between mb-2"><h2 class="font-semibold mb-4" data-i18n="peak_title">Špičky využití</h2><label class="text-sm flex items-center gap-2"><span data-i18n="peak_threshold_label">Prahová hodnota pro nízké bloky (%)</span><input id="lowBlockThr" type="number" min="0" max="100" step="0.1" class="w-24 rounded border px-2 py-1" value="0"></label></div>
       <!-- Two columns: top and bottom hourly utilization -->
       <div class="grid grid-cols-2 gap-4 text-sm">
         <div>
@@ -266,6 +261,7 @@
       <div class="flex items-center justify-between mb-3">
         <h2 class="font-semibold" data-i18n="table_title">Souhrnná tabulka</h2>
         <div class="flex items-center gap-2">
+          <button id="helpBtn" class="rounded-lg border px-2 py-1 text-sm hover:bg-slate-50">?</button>
           <button id="exportCsvBtn" class="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50" data-i18n="export_csv">Exportovat CSV</button>
           <button id="printBtn" class="rounded-lg border px-3 py-2 text-sm font-medium hover:bg-slate-50">Tisk / PDF</button>
         </div>
@@ -331,10 +327,76 @@
     <footer class="text-xs text-slate-500 mb-6">
       <p>Tip: Data musí obsahovat sloupce <i>Stroj, Flotilní označení, Model, Zapnutí stroje, Vypnutí stroje, Čas klíče (s), Provozní doba (s), Čas jízdy (s), Čas zdvihu (s), Čas se zátěží (s)</i>. Hlavička se hledá automaticky (první řádek, který obsahuje „Stroj“).</p>
     </footer>
+  
+  <!-- Help Modal -->
+  <div id="helpModal" class="fixed inset-0 z-50 hidden">
+    <div class="absolute inset-0 bg-black/40" id="helpBackdrop"></div>
+    <div class="absolute inset-0 flex items-center justify-center p-4">
+      <div class="w-full max-w-2xl rounded-2xl bg-white shadow-xl">
+        <div class="flex items-center justify-between px-4 py-3 border-b">
+          <h3 id="helpHeader" class="font-semibold text-lg" data-i18n="help_title">Nápověda výpočtů</h3>
+          <button id="helpClose" class="rounded-md border px-2 py-1 text-sm hover:bg-slate-50" data-i18n="help_close">Zavřít</button>
+        </div>
+        <div class="p-4 text-sm leading-6" id="helpBody"></div></div></div></div>
   </div>
 
+
+</div>
+
 <script>
+const state = {
+  lang: "cs",
+  rows: [],
+  filtered: [],
+  grouped: [],
+  trendDaily: [],
+  weekly: [],
+  groupBy: "Flotilní označení",
+  topOnly: false,
+  shiftMode: "all",
+  shiftFrom: "06:00",
+  shiftTo: "14:00",
+  target: 0.65,
+  // Minimum utilization threshold (e.g. 0.50 for 50%). Values below this will be shown in red.
+  minTarget: 0.50,
+  // Sorting state: index of sorted column (null means no sort) and direction (true=asc, false=desc)
+  sortColumn: null,
+  sortAsc: true,
+  charts: { util: null, stack: null, trend: null, weekly: null, heatmap: null },
+  heatmap: []
+  , selectedWarehouse: 'all'
+  , peaks: []
+  , lows: []
+  , dailyPeaks: []
+  , dailyLows: []
+  , weekComparison: null
+  , drivers: []
+  , compareType: 'weeks'
+  , week1: null
+  , week2: null
+  , date1: null
+  , date2: null
+  , periodComparison: null
+};
+
 // --- i18n dictionary ---
+
+// Help modal logic
+(function(){
+  const btn = document.getElementById('helpBtn');
+  const modal = document.getElementById('helpModal');
+  const closeBtn = document.getElementById('helpClose');
+  const backdrop = document.getElementById('helpBackdrop');
+  if(btn && modal){
+    const open = ()=> modal.classList.remove('hidden');
+    const close = ()=> modal.classList.add('hidden');
+    btn.addEventListener('click', open);
+    if(closeBtn) closeBtn.addEventListener('click', close);
+    if(backdrop) backdrop.addEventListener('click', close);
+    document.addEventListener('keydown', (e)=>{ if(e.key==='Escape') close(); });
+  }
+})();
+
 const I18N = {
   cs: {
     upload_title: "Nahrajte report (.xlsx)",
@@ -389,6 +451,57 @@ const I18N = {
     , compare_insufficient: "Nedostatek dat pro porovnání."
     , week1_label: "První týden"
     , week2_label: "Druhý týden"
+    , help_title: "Nápověda výpočtů"
+    , help_close: "Zavřít"
+    , help_button_title: "Nápověda výpočtů"
+    , help_intro: "Níže je popis toho, jak se počítají jednotlivé metriky a procentuální využití v <b>Souhrnné tabulce</b>."
+    , help_items: [
+      "<b>Sezení</b> – počet řádků v datech po aplikaci filtrů (datum, směna, provoz…). Jedno sezení odpovídá intervalu <i>Zapnutí stroje</i> → <i>Vypnutí stroje</i>.",
+      "<b>Čas klíče</b> – součet <code>Čas klíče (s)</code> všech sezení ve skupině, převedený na hodiny: <code>Σ sekundy / 3600</code>.",
+      "<b>Provozní doba</b> – součet <code>Provozní doba (s)</code> všech sezení ve skupině, v hodinách.",
+      "<b>Jízda</b>, <b>Zdvih</b>, <b>Se zátěží</b> – součty příslušných časů v hodinách; <b>Volnoběh</b> = <code>max(0, Čas klíče − Provozní doba)</code>.",
+      "<b>Využití (%)</b> – vážený poměr za skupinu: <code>Σ(Provozní doba) / Σ(Čas klíče) × 100</code>. <u>Není</u> to průměr procent ze sezení.",
+      "<b>Směnové filtrování</b> – sezení se započítá, pokud se <u>překrývá</u> s vybraným časovým oknem směny. Časy se <u>nekrátí</u> na délku směny.",
+      "<b>Jednotky a zaokrouhlení</b> – v souhrnu v <b>hodinách</b> (2 desetinná místa). V detailu v <b>minutách</b> (1 desetinné místo) s tooltipem na hodiny; drobné odchylky jsou zaokrouhlením."
+    ]
+    , help_example_title: "Příklad váženého využití"
+    , help_example_a: "Sezení A: Klíč 0,20 h, Provoz 0,10 h → 50 %"
+    , help_example_b: "Sezení B: Klíč 0,30 h, Provoz 0,20 h → 66,7 %"
+    , help_example_sum: "Souhrnné využití = (0,10 + 0,20) / (0,20 + 0,30) = <b>0,60 = 60&nbsp;%</b> (nikoliv průměr 50 % a 66,7 %)."
+    , group_options: {
+        "Flotilní označení": "Flotilní označení",
+        "Stroj": "Stroj",
+        "Model": "Model",
+        "Rodina stroje": "Rodina stroje",
+        "Řidič": "Řidič",
+        "Provoz": "Provoz"
+      }
+    , legend_items: [
+        "<b>Čas klíče</b> – celkový čas se zapnutým klíčkem (h)",
+        "<b>Provozní doba</b> – aktivní práce stroje (h)",
+        "<b>Využití</b> – Provozní doba / Čas klíče",
+        "<b>Jízda</b>, <b>Zdvih</b>, <b>Se zátěží</b>, <b>Volnoběh</b> – hodinový rozklad"
+      ]
+    , col_model: "Model"
+    , col_machines: "Stroje"
+    , col_sessions: "Sezení"
+    , col_key_h: "Čas klíče (h)"
+    , col_op_h: "Provozní (h)"
+    , col_util: "Využití"
+    , col_drive_h: "Jízda (h)"
+    , col_lift_h: "Zdvih (h)"
+    , col_load_h: "Se zátěží (h)"
+    , col_idle_h: "Volnoběh (h)"
+    , col_start: "Start"
+    , col_end: "Konec"
+    , col_key_min: "Klíč (min)"
+    , col_op_min: "Provoz (min)"
+    , col_drive_min: "Jízda (min)"
+    , col_lift_min: "Zdvih (min)"
+    , col_load_min: "Se zátěží (min)"
+    , col_idle_min: "Volnoběh (min)"
+    , col_util_pct: "Využití (%)"
+    , peak_threshold_label: "Prahová hodnota pro nízké bloky (%)"
   },
   en: {
     upload_title: "Upload report (.xlsx)",
@@ -446,40 +559,7 @@ const I18N = {
   }
 };
 
-const state = {
-  lang: "cs",
-  rows: [],
-  filtered: [],
-  grouped: [],
-  trendDaily: [],
-  weekly: [],
-  groupBy: "Flotilní označení",
-  topOnly: false,
-  shiftMode: "all",
-  shiftFrom: "06:00",
-  shiftTo: "14:00",
-  target: 0.65,
-  // Minimum utilization threshold (e.g. 0.50 for 50%). Values below this will be shown in red.
-  minTarget: 0.50,
-  // Sorting state: index of sorted column (null means no sort) and direction (true=asc, false=desc)
-  sortColumn: null,
-  sortAsc: true,
-  charts: { util: null, stack: null, trend: null, weekly: null, heatmap: null },
-  heatmap: []
-  , selectedWarehouse: 'all'
-  , peaks: []
-  , lows: []
-  , dailyPeaks: []
-  , dailyLows: []
-  , weekComparison: null
-  , drivers: []
-  , compareType: 'weeks'
-  , week1: null
-  , week2: null
-  , date1: null
-  , date2: null
-  , periodComparison: null
-};
+
 
 const REQUIRED = [
   "Stroj","Flotilní označení","Model","Zapnutí stroje","Vypnutí stroje",
@@ -497,6 +577,77 @@ const ALIASES = {
 };
 
 function t(key){ return I18N[state.lang][key] || key; }
+
+
+function renderLegend(){
+  const el = document.getElementById('legendList');
+  if(!el) return;
+  let items = (I18N[state.lang] && I18N[state.lang].legend_items) || [];
+  if(!items.length){
+    items = state.lang==='en'
+      ? [
+         '<b>Key time</b> – total time with ignition on (h)',
+         '<b>Operating time</b> – active work time (h)',
+         '<b>Utilization</b> – Operating / Key',
+         '<b>Drive</b>, <b>Lift</b>, <b>With load</b>, <b>Idle</b> – hourly breakdown'
+        ]
+      : [
+         '<b>Čas klíče</b> – celkový čas se zapnutým klíčkem (h)',
+         '<b>Provozní doba</b> – aktivní práce stroje (h)',
+         '<b>Využití</b> – Provozní doba / Čas klíče',
+         '<b>Jízda</b>, <b>Zdvih</b>, <b>Se zátěží</b>, <b>Volnoběh</b> – hodinový rozklad'
+        ];
+  }
+  el.innerHTML = items.map(s => `<li>${s}</li>`).join('');
+}
+
+function localizeGroupByOptions(){
+  const gb = document.getElementById('groupBy');
+  if(!gb) return;
+  const map = (I18N[state.lang] && I18N[state.lang].group_options) || {};
+  Array.from(gb.options).forEach(opt => {
+    const orig = opt.getAttribute('data-original') || opt.textContent;
+    if(!opt.getAttribute('data-original')) opt.setAttribute('data-original', orig);
+    const translated = map[orig] || orig;
+    opt.textContent = translated;
+  });
+}
+
+function groupLabel(key){
+  const map = (I18N[state.lang] && I18N[state.lang].group_options) || {};
+  return map[key] || key;
+}
+
+
+
+function renderHelp(){
+  const body = document.getElementById('helpBody');
+  const header = document.getElementById('helpHeader');
+  const closeBtn = document.getElementById('helpClose');
+  const helpBtn = document.getElementById('helpBtn');
+  if(!body) return;
+  if(header){ header.textContent = t('help_title'); }
+  if(closeBtn){ closeBtn.textContent = t('help_close'); }
+  if(helpBtn){ helpBtn.setAttribute('title', t('help_button_title')); }
+  const intro = I18N[state.lang].help_intro || '';
+  const items = I18N[state.lang].help_items || [];
+  const ex_t = I18N[state.lang].help_example_title || '';
+  const ex_a = I18N[state.lang].help_example_a || '';
+  const ex_b = I18N[state.lang].help_example_b || '';
+  const ex_s = I18N[state.lang].help_example_sum || '';
+  const list = items.map(li => `<li>${li}</li>`).join('');
+  body.innerHTML = `
+    <p class="mb-2 text-slate-700">${intro}</p>
+    <ul class="list-disc pl-5 space-y-2">${list}</ul>
+    <div class="mt-3 p-3 bg-slate-50 rounded-lg">
+      <div class="font-medium mb-1">${ex_t}</div>
+      <code>${ex_a}</code><br/>
+      <code>${ex_b}</code><br/>
+      <span>${ex_s}</span>
+    </div>
+  `;
+}
+
 
 function setLang(lang){
   state.lang = lang;
@@ -534,11 +685,40 @@ function setLang(lang){
   // Re-render week comparison and drivers with correct language
   renderComparison();
   renderDrivers();
+  // Localize group-by option labels and legend list
+  localizeGroupByOptions();
+  renderLegend();
+  // Re-render help/modal content
+  renderHelp();
 
 }
 
 document.getElementById("lang").addEventListener("change", e => {
   setLang(e.target.value);
+});
+
+// Initial render of legend/help content in default language
+localizeGroupByOptions();
+renderLegend();
+renderHelp();
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  const inp = document.getElementById('lowBlockThr');
+  if(inp){
+    inp.value = (typeof state.lowBlockThresholdPct === 'number' ? state.lowBlockThresholdPct : 0).toString();
+    const onChange = () => {
+      const v = parseFloat(inp.value);
+      state.lowBlockThresholdPct = isNaN(v) ? 0 : Math.max(0, Math.min(100, v));
+      computeHeatmap();
+      renderPeaks();
+    };
+    inp.addEventListener('change', onChange);
+    inp.addEventListener('blur', onChange);
+  }
+});
+
+document.addEventListener('DOMContentLoaded', ()=>{
+  try{ localizeGroupByOptions(); renderLegend(); renderHelp(); }catch(e){}
 });
 
 // --- File handling ---
@@ -819,6 +999,8 @@ function intersectsShift(s,e,startMin,endMin){
 }
 
 function secToHours(s){ return s / 3600; }
+
+function hoursToMinutes(h){ return h * 60; }
 function pct(n){ return (n*100).toFixed(1) + "%"; }
 function safeDiv(a,b){ return b>0 ? (a/b) : 0; }
 
@@ -1090,17 +1272,17 @@ function renderTable(){
   }
 
   const headers = [
-    state.groupBy,
-    "Model",
-    "Stroje",
-    "Sezení",
-    "Čas klíče (h)",
-    "Provozní (h)",
-    "Využití",
-    "Jízda (h)",
-    "Zdvih (h)",
-    "Se zátěží (h)",
-    "Volnoběh (h)"
+    groupLabel(state.groupBy),
+    t("col_model"),
+    t("col_machines"),
+    t("col_sessions"),
+    t("col_key_h"),
+    t("col_op_h"),
+    t("col_util"),
+    t("col_drive_h"),
+    t("col_lift_h"),
+    t("col_load_h"),
+    t("col_idle_h")
   ];
   thead.innerHTML = "<tr>" + headers.map(h => `<th class="text-left px-3 py-2">${h}</th>`).join("") + "</tr>";
   tbody.innerHTML = state.grouped.map(r => `
@@ -1155,7 +1337,58 @@ function renderCharts(){
           label: I18N[state.lang].chart_util,
           data: utilData,
           backgroundColor: utilData.map(v => v >= state.target*100 ? 'rgba(16,185,129,0.7)' : (v >= state.minTarget*100 ? 'rgba(234,179,8,0.7)' : 'rgba(239,68,68,0.7)'))
-        },
+    , help_title: "Calculation help"
+    , help_close: "Close"
+    , help_button_title: "Calculation help"
+    , help_intro: "Below is an explanation of how each metric and the utilization percentage are calculated in the <b>Summary table</b>."
+    , help_items: [
+      "<b>Sessions</b> – number of rows after filters (date, shift, operation…). One session is the interval from <i>Machine On</i> to <i>Machine Off</i>.",
+      "<b>Key time</b> – sum of <code>Key time (s)</code> across sessions in the group, converted to hours: <code>Σ seconds / 3600</code>.",
+      "<b>Operating time</b> – sum of <code>Operating time (s)</code> across sessions, in hours.",
+      "<b>Drive</b>, <b>Lift</b>, <b>With load</b> – sums in hours; <b>Idle</b> = <code>max(0, Key − Operating)</code>.",
+      "<b>Utilization (%)</b> – weighted ratio for the group: <code>Σ(Operating) / Σ(Key) × 100</code>. It is <u>not</u> the average of per‑session percentages.",
+      "<b>Shift filter</b> – a session is counted if it <u>overlaps</u> the chosen shift window. Times are <u>not</u> truncated to shift length.",
+      "<b>Units & rounding</b> – summary in <b>hours</b> (2 decimals). Details in <b>minutes</b> (1 decimal) with an hour tooltip; small differences may occur due to rounding."
+    ]
+    , help_example_title: "Weighted utilization example"
+    , help_example_a: "Session A: Key 0.20 h, Operating 0.10 h → 50%"
+    , help_example_b: "Session B: Key 0.30 h, Operating 0.20 h → 66.7%"
+    , help_example_sum: "Summary utilization = (0.10 + 0.20) / (0.20 + 0.30) = <b>0.60 = 60&nbsp;%</b> (not the average of 50% and 66.7%)."
+    , group_options: {
+        "Flotilní označení": "Fleet tag",
+        "Stroj": "Machine",
+        "Model": "Model",
+        "Rodina stroje": "Machine family",
+        "Řidič": "Driver",
+        "Provoz": "Operation"
+      }
+    , legend_items: [
+        "<b>Key time</b> – total time with ignition on (h)",
+        "<b>Operating time</b> – active work time (h)",
+        "<b>Utilization</b> – Operating time / Key time",
+        "<b>Drive</b>, <b>Lift</b>, <b>With load</b>, <b>Idle</b> – hourly breakdown"
+      ]
+    , col_model: "Model"
+    , col_machines: "Machines"
+    , col_sessions: "Sessions"
+    , col_key_h: "Key time (h)"
+    , col_op_h: "Operating (h)"
+    , col_util: "Utilization"
+    , col_drive_h: "Drive (h)"
+    , col_lift_h: "Lift (h)"
+    , col_load_h: "With load (h)"
+    , col_idle_h: "Idle (h)"
+    , col_start: "Start"
+    , col_end: "End"
+    , col_key_min: "Key (min)"
+    , col_op_min: "Operating (min)"
+    , col_drive_min: "Drive (min)"
+    , col_lift_min: "Lift (min)"
+    , col_load_min: "With load (min)"
+    , col_idle_min: "Idle (min)"
+    , col_util_pct: "Utilization (%)"
+    , peak_threshold_label: "Low block threshold (%)"
+  },
         {
           type: 'line',
           label: (state.lang==='cs'?'Cíl':'Target'),
@@ -1355,13 +1588,23 @@ function renderPeaks(){
   }).join('');
   // Render lowest utilization hours
   if(lowUL){
-    const lows = state.lows || [];
-    lowUL.innerHTML = lows.map(p => {
-      const day = state.lang === 'cs' ? shortCs[p.y] : shortEn[p.y];
-      const hourStart = String(p.x).padStart(2,'0');
-      const hourEnd = String((p.x + 1) % 24).padStart(2,'0');
-      return `<li><span class="font-medium">${day} ${hourStart}:00–${hourEnd}:00</span> – ${(p.v || 0).toFixed(1)}%</li>`;
-    }).join('');
+    const blocks = state.idleBlocks || [];
+    if(blocks.length){
+      lowUL.innerHTML = blocks.map(b => {
+        const day = state.lang === 'cs' ? shortCs[b.y] : shortEn[b.y];
+        const hourStart = String(b.start).padStart(2,'0');
+        const hourEnd = String(b.end % 24).padStart(2,'0');
+        return `<li><span class="font-medium">${day} ${hourStart}:00–${hourEnd}:00</span> – ${b.avg.toFixed(1)}% <span class="text-slate-500">(${b.len} h)</span></li>`;
+      }).join('');
+    } else {
+      const lows = state.lows || [];
+      lowUL.innerHTML = lows.map(p => {
+        const day = state.lang === 'cs' ? shortCs[p.y] : shortEn[p.y];
+        const hourStart = String(p.x).padStart(2,'0');
+        const hourEnd = String((p.x + 1) % 24).toString().padStart(2,'0');
+        return `<li><span class="font-medium">${day} ${hourStart}:00–${hourEnd}:00</span> – ${(p.v || 0).toFixed(1)}%</li>`;
+      }).join('');
+    }
   }
 }
 
@@ -1773,6 +2016,30 @@ function computeHeatmap(){
     }
   }
   state.heatmap = data;
+  // Build continuous low-utilization blocks using threshold
+  const idleBlocks = [];
+  const thr = typeof state.lowBlockThresholdPct === 'number' ? state.lowBlockThresholdPct : 0;
+  for(let day=0; day<7; day++){
+    let start = -1, sum = 0, count = 0;
+    for(let hour=0; hour<=24; hour++){
+      let val = 0;
+      if(hour<24){
+        const km = keyMinutes[day][hour];
+        const um = utilMinutes[day][hour];
+        val = km > 0 ? (um / km) * 100 : 0;
+      }
+      const isLow = (hour<24) ? (val <= thr) : false;
+      if(isLow && start === -1){ start = hour; sum = val; count = 1; }
+      else if(isLow){ sum += val; count++; }
+      if((!isLow || hour===24) && start !== -1){
+        const end = hour; const len = end - start;
+        if(len > 0){ const avg = count ? (sum / count) : 0; idleBlocks.push({ y: day, start, end, len, avg }); }
+        start = -1; sum = 0; count = 0;
+      }
+    }
+  }
+  state.idleBlocks = idleBlocks.sort((a,b) => (b.len - a.len) || (a.avg - b.avg)).slice(0,5);
+
   // compute top 5 peak utilization cells
   const sorted = data.slice().sort((a,b) => b.v - a.v);
   state.peaks = sorted.slice(0, 5);
@@ -2019,11 +2286,11 @@ function toggleRowDetails(row){
   }
   dayHtml += '</tbody></table></div>';
   // Build sessions table
-  const cols = ['Start','Konec','Klíč (h)','Provoz (h)','Jízda (h)','Zdvih (h)','Se zátěží (h)','Volnoběh (h)','Využití (%)'];
+  const cols = [t('col_start'), t('col_end'), t('col_key_min'), t('col_op_min'), t('col_drive_min'), t('col_lift_min'), t('col_load_min'), t('col_idle_min'), t('col_util_pct')];
   let sessHtml = '<div class="mt-3"><table class="min-w-full text-sm"><thead class="bg-slate-100"><tr>';
   sessHtml += cols.map(c => `<th class="text-left px-2 py-1">${c}</th>`).join('');
   sessHtml += '</tr></thead><tbody>';
-  matches.forEach(item => {
+  let sum_key=0, sum_op=0, sum_drive=0, sum_lift=0, sum_load=0, sum_idle=0; matches.forEach(item => {
     const s = item['Zapnutí stroje'];
     const e = item['Vypnutí stroje'];
     const key_h = secToHours(item['Čas klíče (s)'] || 0);
@@ -2036,15 +2303,17 @@ function toggleRowDetails(row){
     sessHtml += '<tr class="border-t">'
       + `<td class="px-2 py-1">${s ? new Date(s).toLocaleString() : ''}</td>`
       + `<td class="px-2 py-1">${e ? new Date(e).toLocaleString() : ''}</td>`
-      + `<td class="px-2 py-1">${key_h.toFixed(2)}</td>`
-      + `<td class="px-2 py-1">${op_h.toFixed(2)}</td>`
-      + `<td class="px-2 py-1">${drive_h.toFixed(2)}</td>`
-      + `<td class="px-2 py-1">${lift_h.toFixed(2)}</td>`
-      + `<td class="px-2 py-1">${load_h.toFixed(2)}</td>`
-      + `<td class="px-2 py-1">${idle_h.toFixed(2)}</td>`
-      + `<td class="px-2 py-1">${util.toFixed(1)}</td>`
+      + `<td class="px-2 py-1" title="= ${key_h.toFixed(2)} h">${hoursToMinutes(key_h).toFixed(1)}</td>`
+      + `<td class="px-2 py-1" title="= ${op_h.toFixed(2)} h">${hoursToMinutes(op_h).toFixed(1)}</td>`
+      + `<td class="px-2 py-1" title="= ${drive_h.toFixed(2)} h">${hoursToMinutes(drive_h).toFixed(1)}</td>`
+      + `<td class="px-2 py-1" title="= ${lift_h.toFixed(2)} h">${hoursToMinutes(lift_h).toFixed(1)}</td>`
+      + `<td class="px-2 py-1" title="= ${load_h.toFixed(2)} h">${hoursToMinutes(load_h).toFixed(1)}</td>`
+      + `<td class="px-2 py-1" title="= ${idle_h.toFixed(2)} h">${hoursToMinutes(idle_h).toFixed(1)}</td>`
+      + `<td class="px-2 py-1">${util.toFixed(1)}</td>`;
+  sum_key += key_h; sum_op += op_h; sum_drive += drive_h; sum_lift += lift_h; sum_load += load_h; sum_idle += idle_h
       + '</tr>';
   });
+  sessHtml += `<tr class="bg-slate-100 font-medium"><td class="px-2 py-1" colspan="2">Σ</td><td class="px-2 py-1" title="= ${sum_key.toFixed(2)} h">${hoursToMinutes(sum_key).toFixed(1)}</td><td class="px-2 py-1" title="= ${sum_op.toFixed(2)} h">${hoursToMinutes(sum_op).toFixed(1)}</td><td class="px-2 py-1">${hoursToMinutes(sum_drive).toFixed(1)}</td><td class="px-2 py-1">${hoursToMinutes(sum_lift).toFixed(1)}</td><td class="px-2 py-1">${hoursToMinutes(sum_load).toFixed(1)}</td><td class="px-2 py-1">${hoursToMinutes(sum_idle).toFixed(1)}</td><td class="px-2 py-1">${(sum_op>0 && sum_key>0 ? (sum_op/sum_key*100).toFixed(1) : '0.0')}</td></tr>`;
   sessHtml += '</tbody></table></div>';
   // Assemble the detail HTML
   const heatmapId = 'hm_' + Math.random().toString(36).substr(2, 8);
